@@ -114,7 +114,7 @@ class myThread (threading.Thread):
 					utcDatetime = datetime.datetime.utcnow()
 					utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-					site.tweet(command[6:], utcTime)
+					site.tweet(utcTime, site.getId(), command[6:])
 					sendingPorts = site.getPorts()
 					self.tweetToAll(sendingPorts)
 				elif command == "view":
@@ -130,8 +130,9 @@ class myThread (threading.Thread):
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					# print name
-					site.unblock(utcTime,ord(name[0])-65)
-
+					site.unblock(utcTime, site.getId(), ord(name[0])-65)
+					sendingPorts = site.getPorts()
+					self.tweetToAll(sendingPorts)
 				elif command[:6] == "block ":
 					name = command[6:]
 					siteName = sys.argv[2]
@@ -139,13 +140,15 @@ class myThread (threading.Thread):
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					print "Blocking User: "+command[6:]
-					site.block(utcTime,ord(name[0])-65)
+					site.block(utcTime, site.getId(), ord(name[0])-65)
+					sendingPorts = site.getPorts()
+					self.tweetToAll(sendingPorts)
 				elif command == "View Log":
 					site.viewLog()
 				elif command == "View Clock":
 					site.viewMatrixClock()
 				elif command == "View Dictionary":
-					site.viewDictonary()
+					site.viewDictionary()
 
 
 				else:
@@ -165,8 +168,6 @@ class myThread (threading.Thread):
 			if peerPort != int(sys.argv[1]) and len(sendingPorts) == len(self.peers):
 				# print "### Sending", msg, "to", peerPort
 				fullMessage = site.getLog()
-				print "Full message"
-				print fullMessage
  				dilledMessage = dill.dumps(fullMessage)
 				# c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
 				c = Client("", peerPort, dilledMessage)
