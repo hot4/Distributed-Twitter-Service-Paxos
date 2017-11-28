@@ -12,14 +12,16 @@ class User:
             self.userId = ord(userId) - 65
             self.peers = peers
             self.tweets = list()
+            for event in self.log:
+                self.insertTweet(event)
         else:
             # Create User from scratch
             print "Creating user from scratch"
             self.log = list()
+            self.tweets = list()
             self.blockedUsers = list()
             self.userId = ord(userId) - 65
             self.peers = peers
-            self.tweets = list()
 
     def pickleSelf(self):
         pickleSelf = {
@@ -32,20 +34,33 @@ class User:
     @param 
         eventName: Name of event 
         message: The body of a tweet, or the username of who was blocked or unblocked
+        id: User who created event
         time: UTC time
     @effects
-        Adds new eventRecord to log and tweets if eventName is tweet
+        Adds new eventRecord to log if it does not exist in the log already
+        Adds tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     @modifies
-        log private fields
+        log and tweets private fields
     """
-    def insertion(self, eventName, message, id, time):
+    def insertEvent(self, eventName, message, id, time):
         eventRecord = (eventName, message, id, time)
-        self.log.append(eventRecord)
-
-        if (eventName == "tweet"):
-            self.tweets.append(eventRecord)
+        
+        if(not (eventRecord in self.log)):
+            self.log.append(eventRecord)
+        
+        self.insertTweet(eventRecord)
 
         self.pickleSelf()
+
+    """
+    @param
+        event: Event that has occurred by some User
+    @effects
+        Adds event to tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
+    """
+    def insertTweet(self, event):
+        if (event[0] == "tweet" and not (self.isBlocked(event[2], self.userId)) and not (event in self.tweets)):
+            self.tweets.append(event)
 
     """
     @return
@@ -73,7 +88,6 @@ class User:
         for tweet in self.tweets:
             print tweet
 
-
     """
     @effects 
         Prints all events in the log
@@ -92,8 +106,9 @@ class User:
 
     """
     @param
-        message: Body of tweet
         time: UTC time
+        id: User who created the tweet
+        message: Body of tweet
     @effects 
         Adds tweet to log and tweets private fields
     @modifies 
@@ -101,12 +116,28 @@ class User:
     """
     def tweet(self, time, id, message):
         # Add event to log
-        self.insertion("tweet", message, id, time)
+        self.insertEvent("tweet", message, id, time)
+
+    """
+    @param
+        id: User who blocked receiver
+        receiver: User who is being blocked by id
+    @effects 
+        Checks whether a block exists between id and receiver
+    @return
+        True if a block exists between id and receiver, false otherwise
+    """
+    def isBlocked(self, id, receiver):
+        for i in range(0, len(self.blockedUsers)):
+            if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
+                return True
+        return False
 
     """
     @param
         time: UTC Time
-        receiver: The site that will be blocked
+        id: User who is blocking receiver
+        receiver: User who is being blocked by id
     @effects 
         Adds event to log
         Adds block relationship to dictionary if one does not exist already
@@ -114,27 +145,29 @@ class User:
         log and blockedUsers private field
     """
     def block(self, time, id, receiver):
-        print "Blocked User %d\n" % (receiver)
+        if(id == self.userId):
+            print "Blocked User %d\n" % (receiver)
 
         # Add event to log
-        self.insertion("block", receiver, id, time)
-        
-        # Check if block already exists in dictionary
-        blocked = False
-        for i in range(0, len(self.blockedUsers)):
-            if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
-                blocked = True
+        self.insertEvent("block", receiver, id, time)
 
         # Add block to dictionary if it does not exist already
-        if(not (blocked)):
+        if(not (self.isBlocked(id, receiver))):
             self.blockedUsers.append((id, receiver))
+
+            # Remove all tweets from this User's tweets if they have been revoked access to view
+            if(receiver == self.userId):
+                for i in range(0, len(self.tweets)):
+                    if(self.tweets[i][2] == id):
+                        del self.tweets[i]
 
         self.pickleSelf()
 
     """
     @param
         time: UTC Time
-        receiver: The site that will be unblocked
+        id: User who is unblocking receiver
+        receiver: User who is being unblocked by id
     @effects
         Adds event to log
         Removes blocked relationship from dictionary if one exists
@@ -142,20 +175,28 @@ class User:
         log and blockedUsers private fields
     """
     def unblock(self, time, id, receiver):
-        print "Unblocked User %d\n" % (receiver)
+        if(id != self.userId):
+            print "Unblocked User %d\n" % (receiver)
 
         # Add event to log
-        self.insertion("unblock", receiver, id, time)
+        self.insertEvent("unblock", receiver, id, time)
 
         # Delete blocked relationship from dictionary if it exists
-        for i in range(0, len(self.blockedUsers)):
-            if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
-                del self.blockedUsers[i]
-                break
+        if (self.isBlocked(id, receiver)):
+            for i in range(0, len(self.blockedUsers)):
+                if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
+                    del self.blockedUsers[i]
+                    break
 
         # Set dictionary to new list if no blocked relationships exist
         if(len(self.blockedUsers) == 0):
             self.blockedUsers = list()
+
+            # Add all tweets from this User's log if they have been given access to view
+            if(receiver == self.userId):
+                for event in self.log:
+                    if(event[2] == id and event[0] == "tweet"):
+                        self.tweets.append(event)
 
         self.pickleSelf()
 
@@ -170,19 +211,18 @@ class User:
         log, tweets, and dictionary private fields
     """
     def receive(self, receivedLog):
+        print receivedLog
         # Update log, tweets, and dictionary private fields
         for event in receivedLog:
-            if (not (event in self.tweets) and event[0] == "tweet"):
+            if (event[0] == "tweet"):
+                print "Recevived tweet event!"
                 # Add tweet to log and tweets
-               self.tweet(event[3], event[2], event[1])
-            if (not (event in self.log)):
-                if(event[0] == "block"):
-                    print "Received block event!"
-
-                    # Add block to log and dictionary
-                    self.block(event[3], event[2], event[1])
-                if(event[0] == "unblock"):
-                    print "Received unblock event!"
-
-                    # Add unblock to log and remove from dictionary
-                    self.unblock(event[3], event[2], event[1])
+                self.tweet(event[3], event[2], event[1])
+            if(event[0] == "block"):
+                print "Received block event!"
+                # Add block to log and dictionary
+                self.block(event[3], event[2], event[1])
+            if(event[0] == "unblock"):
+                print "Received unblock event!"
+                # Add unblock to log and remove from dictionary
+                self.unblock(event[3], event[2], event[1])
