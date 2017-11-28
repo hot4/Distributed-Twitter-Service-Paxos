@@ -116,6 +116,10 @@ class User:
     def getPorts(self):
         return self.peers
 
+    """
+    @return
+        Private field userId
+    """
     def getId(self):
         return self.userId
 
@@ -134,6 +138,14 @@ class User:
     """
     def viewTimelineLog(self):
         for event in self.timelineLog:
+            print event
+
+    """
+    @effects
+        Prints all events in the paxosLog
+    """
+    def viewPaxosLog(self):
+        for event in self.paxosLog:
             print event
 
     """
@@ -271,19 +283,54 @@ class User:
 
     """
     @param
-        index: Index some proposer wishes to write an event to in queue
+        index: Index some proposer wishes to write an event to in paxosLog
         n: Proposal number from a proposer
     @effects
-        Checks if User has accepted some number and value
+        Checks if User has accepted some proposal with number and value based on index
     @return
-        If the User has accepted some number and value, such information will be returned given n is greater than maxPrepare and (None, None) otherwise
+        If the User has accepted some number and value, that proposal will be returned given n is greater than maxPrepare
+        Else (None, None)
     """
     def prepare(self, index, n):
         for event in queue:
-            # Check if event is has been accepted and proposal number exceeds maxPrepare
-            if (event[5] == index and n > event[6]):
+            # Check if event has been accepted and proposal number exceeds maxPrepare based on index
+            if(event[5] == index and n > event[6]):
                 return (event[7], event[8])
         return (None, None)
+
+    """
+    @param
+        index: Index some proposer wishes to write an event to in paxosLog
+        n: Proposal number from a proposer
+        v: Proposal value from a proposer
+        list: Container of events
+    @effects
+        Modifies proposal in list with n and v based on index
+    """
+    def updateProposal(self, index, n, v, list):
+        for i in range(0, len(queue)):
+            # Check if event should be updated with (n, v) if n is greater than or equal to maxPrepare of proposal based on index
+            if(queue[i][5] == index and n >= queue[6]):
+                # Update maxPrepare of proposal
+                queue[i][6] = n
+                # Update accNum of proposal
+                queue[i][7] = n
+                # Update accVal of proposal
+                queue[i][8] = v
+
+    """
+    @param
+        index: Index some proposer wishes to write an event to in paxosLog
+        n: Proposal number from a proposer
+        v: Proposal value from a proposer
+    @effets
+        Modifies proposal in timelineLog and queue with n and v based on index
+    @modifies
+        timelineLog and queue private fields
+    """
+    def accept(self, index, n, v):
+        updateProposal(index, n, v, self.timelineLog)
+        updateProposal(index, n, v, self.queue)
 
     """
     @param
