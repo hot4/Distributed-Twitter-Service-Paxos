@@ -15,6 +15,7 @@ class User:
             # Add events to (paxosLog and tweets) or queue and store last known empty log entry in paxosLog
             self.paxosLog = list()
             self.queue = list()
+            self.tweets = list()
             self.index = 0
             for event in self.timelineLog:
                 if (event[1]):
@@ -75,6 +76,11 @@ class User:
         # Add eventRecord to timelineLog
         if(not (eventRecord in self.timelineLog)):
             self.timelineLog.append(eventRecord)
+        # Update eventRecord in timelineLog
+        else:
+            for i in range(0, len(self.timelineLog)):
+                if(self.timelineLog[i][5] == index):
+                    self.timelineLog[i][1] = committed
         
         # Add eventRecord to paxosLog or queue
         if(committed):
@@ -214,9 +220,6 @@ class User:
         Block event record
     """
     def block(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        if(id == self.userId):
-            print "Blocked User %d\n" % (receiver)
-
         # Add event to timelineLog and paxosLog if unique
         event = self.insertEvent("block", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
@@ -254,9 +257,6 @@ class User:
         Unblock event record
     """
     def unblock(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        if(id != self.userId):
-            print "Unblocked User %d\n" % (receiver)
-
         # Add event to timelineLog and paxosLog if unique
         event = self.insertEvent("unblock", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
@@ -271,32 +271,15 @@ class User:
         if(len(self.blockedUsers) == 0):
             self.blockedUsers = list()
 
-            # Add all tweets from this User's timelineLog if they have been given access to view
+            # Add all tweets from this User's paxosLog if they have been given access to view
             if(receiver == self.userId):
-                for event in self.timelineLog:
+                for event in self.paxosLog:
                     if(event[3] == id and event[0] == "tweet"):
                         self.tweets.append(event)
 
         self.pickleSelf()
 
         return event
-
-    """
-    @param
-        index: Index some proposer wishes to write an event to in paxosLog
-        n: Proposal number from a proposer
-    @effects
-        Checks if User has accepted some proposal with number and value based on index
-    @return
-        If the User has accepted some number and value, that proposal will be returned given n is greater than maxPrepare
-        Else (None, None)
-    """
-    def prepare(self, index, n):
-        for event in queue:
-            # Check if event has been accepted and proposal number exceeds maxPrepare based on index
-            if(event[5] == index and n > event[6]):
-                return (event[7], event[8])
-        return (None, None)
 
     """
     @param
@@ -316,7 +299,28 @@ class User:
                 # Update accNum of proposal
                 container[i][7] = n
                 # Update accVal of proposal
-                container[i][8] = v
+                if(not (v == None)):
+                    container[i][8] = v
+
+    """
+    @param
+        index: Index some proposer wishes to write an event to in paxosLog
+        n: Proposal number from a proposer
+    @effects
+        Checks if User has accepted some proposal with number and value based on index
+    @return
+        If the User has accepted some number and value, that proposal will be returned given n is greater than maxPrepare
+        Else (None, None)
+    """
+    def prepare(self, index, n):
+        for i in range(0, len(self.queue)):
+            # Check if event has been accepted and proposal number exceeds maxPrepare based on index
+            if(self.queue[i][5] == index and n > self.queue[i][6]):
+                # Update maxPrepare for proposal
+                self.updateProposal(index, n, None, self.timelineLog)
+                self.updateProposal(index, n,  None, self.queue)
+                return (event[7], event[8])
+        return (None, None)
 
     """
     @param
@@ -329,8 +333,8 @@ class User:
         timelineLog and queue private fields
     """
     def accept(self, index, n, v):
-        updateProposal(index, n, v, self.timelineLog)
-        updateProposal(index, n, v, self.queue)
+        self.updateProposal(index, n, v, self.timelineLog)
+        self.updateProposal(index, n, v, self.queue)
 
     """
     @param
@@ -345,20 +349,26 @@ class User:
         index, timelineLog, paxosLog, queue, tweets, and dictionary private fields
     """
     def commit(self, event):
-        # Increment last known emtpy log entry in paxosLog
-        self.index = self.index+1
-
-        # Add event to timelineLog, paxosLog, and, (tweets or dictionary)
+        # Add event to paxosLog, and (tweets or dictionary)
+        # Update event in timelineLog
         # Event: (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         if (event[0] == "tweet"):
             print "Committed tweet event!"
-            # Add tweet to timelineLog and tweets
+            # Add tweet to paxosLog, and tweets
             self.tweet(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "block"):
             print "Committed block event!"
-            # Add block to timelineLog and dictionary
+            # Add block to paxosLog, and dictionary
             self.block(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "unblock"):
             print "Committed unblock event!"
-            # Add unblock to timelineLog and remove from dictionary
+            # Add unblock to paxosLog, and remove from dictionary
             self.unblock(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
+
+        # Index is either the increment of this User's index or event's index value
+        self.index = max(self.index+1, event[5]+1)
+
+        # Delete event from queue since it has been stored in paxosLog
+        for i in range(0, len(self.queue)):
+            if(self.queue[i][5] == event[5]):
+                del self.queue[i]
