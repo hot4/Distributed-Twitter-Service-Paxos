@@ -12,21 +12,31 @@ class User:
             self.userId = ord(userId) - 65
             self.peers = peers
 
-            # Add all committed (true attribute) events into paxosLog
+            # Add events to (paxosLog and tweets) or queue and store last known empty log entry in paxosLog
             self.paxosLog = list()
+            self.queue = list()
+            self.index = 0
             for event in self.timelineLog:
                 if (event[1]):
+                    # Add events to paxosLog and tweets
                     self.paxosLog.append(event)
+                    self.insertTweet(event)
 
-            self.tweets = list()
-            for event in self.timelineLog:
-                self.insertTweet(event)
+                    # Store the max index being stored in paxosLog
+                    self.index = max(self.index, event[5])
+                else:
+                    self.queue.append(event)
+
+            # Increment index to signal last known empty log entry in paxosLog
+            self.index = self.index+1
 
         else:
             # Create User from scratch
             print "Creating user from scratch"
             self.timelineLog = list()
             self.paxosLog = list()
+            self.queue = list()
+            self.index = 0
             self.tweets = list()
             self.blockedUsers = list()
             self.userId = ord(userId) - 65
@@ -42,23 +52,39 @@ class User:
     """
     @param 
         eventName: Name of event 
+        committed: Boolean which indicated if the event was committed to paxosLog
         message: The body of a tweet, or the username of who was blocked or unblocked
         id: User who created event
         time: UTC time
+        index: Index where event is added to paxosLog
+        maxPrepare: Max prepare value User promised to not respond to lower values
+        accNum: Accepted number for event
+        accVal: Accepted value for event
     @effects
         Adds new eventRecord to timelineLog if it does not exist in the timelineLog already
+        Adds new eventRecord to (paxosLog or queue) if it does not exist already based on committed
         Adds tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     @modifies
-        timelineLog and tweets private fields
+        timelineLog, paxosLog, queue, and tweets private fields
     @return 
         Newly created event record
     """
-    def insertEvent(self, eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
-        eventRecord = (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
+    def insertEvent(self, eventName, committed, message, id, time, index, maxPrepare, accNum, accVal):
+        eventRecord = (eventName, committed, message, id, time, index, maxPrepare, accNum, accVal)        
         
+        # Add eventRecord to timelineLog
         if(not (eventRecord in self.timelineLog)):
             self.timelineLog.append(eventRecord)
         
+        # Add eventRecord to paxosLog or queue given unique
+        if(committed):
+            if(not (eventRecord in self.paxosLog)):
+                self.paxosLog.append(eventRecord)
+        else:
+            if(not (eventRecord in self.queue)):
+                self.queue.append(eventRecord)
+
+        # Add eventRecord to tweets
         self.insertTweet(eventRecord)
 
         self.pickleSelf()
@@ -77,10 +103,10 @@ class User:
 
     """
     @return
-        Private field timelineLog
+        Private field index
     """
-    def gettimelineLog(self):
-        return self.timelineLog
+    def getIndex(self):
+        return self.index
 
     """
     @return 
@@ -119,19 +145,24 @@ class User:
 
     """
     @param
+        eventName: Name of event 
         committed: Boolean which indicated if the event was committed to paxosLog
-        message: Body of tweet
-        id: User who created the tweet
+        message: The body of a tweet
+        id: User who created event
         time: UTC time
+        index: Index where event is added to paxosLog
+        maxPrepare: Max prepare value User promised to not respond to lower values
+        accNum: Accepted number for event
+        accVal: Accepted value for event
     @effects 
-        Adds tweet to timelineLog and tweets private fields
+        Adds tweet to timelineLog, (paxosLog or queue), and tweets private fields if unique
     @modifies 
-        timelineLog and tweets private fields
+        timelineLog, (paxosLog or queue), and tweets private fields
     @return 
         Tweet event record
     """
     def tweet(self, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
-        # Add event to timelineLog
+        # Add event to timelineLog, paxosLog, queue, and tweets if unique
         event = self.insertEvent("tweet", commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         return event
 
@@ -152,15 +183,20 @@ class User:
 
     """
     @param
+        eventName: Name of event 
         committed: Boolean which indicated if the event was committed to paxosLog
-        receiver: User who is being blocked by id
-        id: User who is blocking receiver
-        time: UTC Time
+        receiver: The username of who was blocked or unblocked
+        id: User who created event
+        time: UTC time
+        index: Index where event is added to paxosLog
+        maxPrepare: Max prepare value User promised to not respond to lower values
+        accNum: Accepted number for event
+        accVal: Accepted value for event
     @effects 
-        Adds event to timelineLog
+        Adds event to timelineLog, (paxosLog or queue) if unique
         Adds block relationship to dictionary if one does not exist already
     @modifies 
-        timelineLog and blockedUsers private field
+        timelineLog, (paxosLog or queue), and blockedUsers private field
     @return
         Block event record
     """
@@ -168,7 +204,7 @@ class User:
         if(id == self.userId):
             print "Blocked User %d\n" % (receiver)
 
-        # Add event to timelineLog
+        # Add event to timelineLog and paxosLog if unique
         event = self.insertEvent("block", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Add block to dictionary if it does not exist already
@@ -187,15 +223,20 @@ class User:
 
     """
     @param
+        eventName: Name of event 
         committed: Boolean which indicated if the event was committed to paxosLog
-        receiver: User who is being unblocked by id
-        id: User who is unblocking receiver
-        time: UTC Time
+        receiver: The body of a tweet, or the username of who was blocked or unblocked
+        id: User who created event
+        time: UTC time
+        index: Index where event is added to paxosLog
+        maxPrepare: Max prepare value User promised to not respond to lower values
+        accNum: Accepted number for event
+        accVal: Accepted value for event
     @effects
-        Adds event to timelineLog
+        Adds event to timelineLog and (paxosLog or queue) if unique
         Removes blocked relationship from dictionary if one exists
     @modifies
-        timelineLog and blockedUsers private fields
+        timelineLog, (paxosLog or queue), and blockedUsers private fields
     @return
         Unblock event record
     """
@@ -203,7 +244,7 @@ class User:
         if(id != self.userId):
             print "Unblocked User %d\n" % (receiver)
 
-        # Add event to timelineLog
+        # Add event to timelineLog and paxosLog if unique
         event = self.insertEvent("unblock", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Delete blocked relationship from dictionary if it exists
@@ -229,16 +270,37 @@ class User:
 
     """
     @param
+        index: Index some proposer wishes to write an event to in queue
+        n: Proposal number from a proposer
+    @effects
+        Checks if User has accepted some number and value
+    @return
+        If the User has accepted some number and value, such information will be returned given n is greater than maxPrepare and (None, None) otherwise
+    """
+    def prepare(self, index, n):
+        for event in queue:
+            # Check if event is has been accepted and proposal number exceeds maxPrepare
+            if (event[5] == index and n > event[6]):
+                return (event[7], event[8])
+        return (None, None)
+
+    """
+    @param
         event: Event that accepted by a majority of acceptors
     @effects
-        Adds event to timelineLog if event does not exist already
-        Adds tweet to tweets
+        Increments last known empty log entry in paxosLog
+        Adds event to timelineLog and paxosLog
+        Removes event from queue
+        Adds tweet to tweets if
         Updates dictionary based on block and unblock events
     @modifies 
-        timelineLog, tweets, and dictionary private fields
+        index, timelineLog, paxosLog, queue, tweets, and dictionary private fields
     """
     def commit(self, event):
-        # Update timelineLog, tweets, and dictionary private fields
+        # Increment last known emtpy log entry in paxosLog
+        self.index = self.index+1
+
+        # Add event to timelineLog, paxosLog, and, (tweets or dictionary)
         # Event: (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         if (event[0] == "tweet"):
             print "Committed tweet event!"

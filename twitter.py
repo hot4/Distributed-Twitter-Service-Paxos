@@ -114,7 +114,7 @@ class myThread (threading.Thread):
 					utcDatetime = datetime.datetime.utcnow()
 					utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-					event = site.tweet(False, command[6:], site.getId(), utcTime, -1, -1, -1, -1)
+					event = site.tweet(False, command[6:], site.getId(), utcTime, site.getIndex(), -1, -1, -1)
 					self.commit(event)
 				elif command == "view":
 					site.view()
@@ -129,8 +129,8 @@ class myThread (threading.Thread):
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					
-					print "Unblocking User: " + command[6:]
-					event = site.unblock(False, ord(name[0])-65, site.getId(), utcTime, -1, -1, -1, -1)
+					print "Unblocking User: " + command[8:]
+					event = site.unblock(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
 					self.commit(event)
 				elif command[:6] == "block ":
 					name = command[6:]
@@ -140,7 +140,7 @@ class myThread (threading.Thread):
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
 					print "Blocking User: " + command[6:]
-					event = site.block(False, ord(name[0])-65, site.getId(), utcTime, -1, -1, -1, -1)
+					event = site.block(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
 					self.commit(event)
 				elif command == "View Log":
 					site.viewTimelineLog()
