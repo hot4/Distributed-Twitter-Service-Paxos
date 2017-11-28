@@ -45,7 +45,7 @@ class Client(asyncore.dispatcher_with_send):
 	# 	self.close()
 
 	# def handle_write(self):
-	# 	self.send(self.message)
+	# 	self.getLog(self.message)
 	# 	self.close()
 	# 	pass
 
@@ -58,10 +58,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 		data = self.recv(16384)
 		if data:
 			serializedMessage = dill.loads(data)
-
-			hey = site.receive(serializedMessage[0],serializedMessage[1],serializedMessage[2])
-			#print "Received message:", data.rstrip('\n')
-			self.send("Thank you for the message.\n")
+			hey = site.receive(serializedMessage)
 
 class Server(asyncore.dispatcher_with_send):
 	def __init__(self, host, port):
@@ -87,7 +84,7 @@ class Server(asyncore.dispatcher_with_send):
 	# 	data = self.recv(8192)
 	# 	print "Messaged received"
 	# 	if data:
-	# 		self.send(data)
+	# 		self.getLog(data)
 	# 		# self.close()
 
 
@@ -117,10 +114,9 @@ class myThread (threading.Thread):
 					utcDatetime = datetime.datetime.utcnow()
 					utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-					messageData = site.tweet(command[6:], utcTime)
-					sendingPorts = site.nonBlockedPorts()
-					self.tweetToAll(messageData, sendingPorts)
-					print sendingPorts
+					site.tweet(utcTime, site.getId(), command[6:])
+					sendingPorts = site.getPorts()
+					self.tweetToAll(sendingPorts)
 				elif command == "view":
 					site.view()
 				elif command == "quit":
@@ -134,8 +130,9 @@ class myThread (threading.Thread):
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					# print name
-					site.unblock(utcTime,ord(name[0])-65)
-
+					site.unblock(utcTime, site.getId(), ord(name[0])-65)
+					sendingPorts = site.getPorts()
+					self.tweetToAll(sendingPorts)
 				elif command[:6] == "block ":
 					name = command[6:]
 					siteName = sys.argv[2]
@@ -143,13 +140,15 @@ class myThread (threading.Thread):
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					print "Blocking User: "+command[6:]
-					site.block(utcTime,ord(name[0])-65)
+					site.block(utcTime, site.getId(), ord(name[0])-65)
+					sendingPorts = site.getPorts()
+					self.tweetToAll(sendingPorts)
 				elif command == "View Log":
-					site.viewPartialLog()
+					site.viewLog()
 				elif command == "View Clock":
 					site.viewMatrixClock()
 				elif command == "View Dictionary":
-					site.viewDictonary()
+					site.viewDictionary()
 
 
 				else:
@@ -163,21 +162,21 @@ class myThread (threading.Thread):
 				asyncore.loop()
 
 	# Connect to all peers send them <msg>
-	def tweetToAll(self, msg, sendingPorts):
+	def tweetToAll(self, sendingPorts):
 		for index, peerPort in enumerate(self.peers): # avoid connecting to self
 
 			if peerPort != int(sys.argv[1]) and len(sendingPorts) == len(self.peers):
 				# print "### Sending", msg, "to", peerPort
-				fullMessage = site.send(msg, peerPort)
+				fullMessage = site.getLog()
  				dilledMessage = dill.dumps(fullMessage)
 				# c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
 				c = Client("", peerPort, dilledMessage)
 				asyncore.loop(timeout = 5, count = 1)
 			else:
-				nonBlockedPorts = site.nonBlockedPorts()
+				nonBlockedPorts = site.getPorts()
 				check = (index in nonBlockedPorts)
 				if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
-					fullMessage = site.send(msg, peerPort)
+					fullMessage = site.getLog()
 	 				dilledMessage = dill.dumps(fullMessage)
 					c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
 					asyncore.loop(timeout =5, count = 1)
