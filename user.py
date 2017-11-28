@@ -303,20 +303,20 @@ class User:
         index: Index some proposer wishes to write an event to in paxosLog
         n: Proposal number from a proposer
         v: Proposal value from a proposer
-        list: Container of events
+        container: Container of events
     @effects
         Modifies proposal in list with n and v based on index
     """
-    def updateProposal(self, index, n, v, list):
-        for i in range(0, len(queue)):
+    def updateProposal(self, index, n, v, container):
+        for i in range(0, len(container)):
             # Check if event should be updated with (n, v) if n is greater than or equal to maxPrepare of proposal based on index
-            if(queue[i][5] == index and n >= queue[6]):
+            if(container[i][5] == index and n >= container[6]):
                 # Update maxPrepare of proposal
-                queue[i][6] = n
+                container[i][6] = n
                 # Update accNum of proposal
-                queue[i][7] = n
+                container[i][7] = n
                 # Update accVal of proposal
-                queue[i][8] = v
+                container[i][8] = v
 
     """
     @param
