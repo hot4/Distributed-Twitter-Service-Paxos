@@ -7,17 +7,26 @@ class User:
     def __init__(self, userId, peers, pickle=None, pickledUser=None):
         if pickle:
             # Load User from pickle
-            self.log = pickledUser['log']
+            self.timelineLog = pickledUser['timelineLog']
             self.blockedUsers = pickledUser['blockedUsers']
             self.userId = ord(userId) - 65
             self.peers = peers
+
+            # Add all committed (true attribute) events into paxosLog
+            self.paxosLog = list()
+            for event in self.timelineLog:
+                if (event[1]):
+                    self.paxosLog.append(event)
+
             self.tweets = list()
-            for event in self.log:
+            for event in self.timelineLog:
                 self.insertTweet(event)
+
         else:
             # Create User from scratch
             print "Creating user from scratch"
-            self.log = list()
+            self.timelineLog = list()
+            self.paxosLog = list()
             self.tweets = list()
             self.blockedUsers = list()
             self.userId = ord(userId) - 65
@@ -25,7 +34,7 @@ class User:
 
     def pickleSelf(self):
         pickleSelf = {
-            "log": self.log,
+            "timelineLog": self.timelineLog,
             "blockedUsers": self.blockedUsers
         }
         pickle.dump(pickleSelf, open("pickledUser.p", "wb"))
@@ -37,18 +46,18 @@ class User:
         id: User who created event
         time: UTC time
     @effects
-        Adds new eventRecord to log if it does not exist in the log already
+        Adds new eventRecord to timelineLog if it does not exist in the timelineLog already
         Adds tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     @modifies
-        log and tweets private fields
+        timelineLog and tweets private fields
     @return 
         Newly created event record
     """
-    def insertEvent(self, eventName, message, id, time):
-        eventRecord = (eventName, message, id, time)
+    def insertEvent(self, eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
+        eventRecord = (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         
-        if(not (eventRecord in self.log)):
-            self.log.append(eventRecord)
+        if(not (eventRecord in self.timelineLog)):
+            self.timelineLog.append(eventRecord)
         
         self.insertTweet(eventRecord)
 
@@ -63,15 +72,15 @@ class User:
         Adds event to tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     """
     def insertTweet(self, event):
-        if (event[0] == "tweet" and not (self.isBlocked(event[2], self.userId)) and not (event in self.tweets)):
+        if (event[0] == "tweet" and not (self.isBlocked(event[3], self.userId)) and not (event in self.tweets)):
             self.tweets.append(event)
 
     """
     @return
-        Private field log
+        Private field timelineLog
     """
-    def getLog(self):
-        return self.log
+    def gettimelineLog(self):
+        return self.timelineLog
 
     """
     @return 
@@ -94,10 +103,10 @@ class User:
 
     """
     @effects 
-        Prints all events in the log
+        Prints all events in the timelineLog
     """
-    def viewLog(self):
-        for event in self.log:
+    def viewTimelineLog(self):
+        for event in self.timelineLog:
             print event
 
     """
@@ -110,64 +119,66 @@ class User:
 
     """
     @param
-        time: UTC time
-        id: User who created the tweet
+        committed: Boolean which indicated if the event was committed to paxosLog
         message: Body of tweet
+        id: User who created the tweet
+        time: UTC time
     @effects 
-        Adds tweet to log and tweets private fields
+        Adds tweet to timelineLog and tweets private fields
     @modifies 
-        log and tweets private fields
+        timelineLog and tweets private fields
     @return 
         Tweet event record
     """
-    def tweet(self, time, id, message):
-        # Add event to log
-        event = self.insertEvent("tweet", message, id, time)
+    def tweet(self, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
+        # Add event to timelineLog
+        event = self.insertEvent("tweet", commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         return event
 
     """
     @param
-        id: User who blocked commitr
-        commitr: User who is being blocked by id
+        id: User who blocked receiver
+        receiver: User who is being blocked by id
     @effects 
-        Checks whether a block exists between id and commitr
+        Checks whether a block exists between id and receiver
     @return
-        True if a block exists between id and commitr, false otherwise
+        True if a block exists between id and receiver, false otherwise
     """
-    def isBlocked(self, id, commitr):
+    def isBlocked(self, id, receiver):
         for i in range(0, len(self.blockedUsers)):
-            if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == commitr):
+            if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
                 return True
         return False
 
     """
     @param
+        committed: Boolean which indicated if the event was committed to paxosLog
+        receiver: User who is being blocked by id
+        id: User who is blocking receiver
         time: UTC Time
-        id: User who is blocking commitr
-        commitr: User who is being blocked by id
     @effects 
-        Adds event to log
+        Adds event to timelineLog
         Adds block relationship to dictionary if one does not exist already
     @modifies 
-        log and blockedUsers private field
+        timelineLog and blockedUsers private field
     @return
         Block event record
     """
-    def block(self, time, id, commitr):
+    def block(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
         if(id == self.userId):
-            print "Blocked User %d\n" % (commitr)
+            print "Blocked User %d\n" % (receiver)
 
-        # Add event to log
-        event = self.insertEvent("block", commitr, id, time)
+        # Add event to timelineLog
+        event = self.insertEvent("block", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Add block to dictionary if it does not exist already
-        if(not (self.isBlocked(id, commitr))):
-            self.blockedUsers.append((id, commitr))
+        if(not (self.isBlocked(id, receiver))):
+            self.blockedUsers.append((id, receiver))
 
             # Remove all tweets from this User's tweets if they have been revoked access to view
-            if(commitr == self.userId):
+            if(receiver == self.userId):
                 for i in range(0, len(self.tweets)):
-                    if(self.tweets[i][2] == id):
+                    if(self.tweets[i][3] == id):
                         del self.tweets[i]
 
         self.pickleSelf()
@@ -176,28 +187,29 @@ class User:
 
     """
     @param
+        committed: Boolean which indicated if the event was committed to paxosLog
+        receiver: User who is being unblocked by id
+        id: User who is unblocking receiver
         time: UTC Time
-        id: User who is unblocking commitr
-        commitr: User who is being unblocked by id
     @effects
-        Adds event to log
+        Adds event to timelineLog
         Removes blocked relationship from dictionary if one exists
     @modifies
-        log and blockedUsers private fields
+        timelineLog and blockedUsers private fields
     @return
         Unblock event record
     """
-    def unblock(self, time, id, commitr):
+    def unblock(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
         if(id != self.userId):
-            print "Unblocked User %d\n" % (commitr)
+            print "Unblocked User %d\n" % (receiver)
 
-        # Add event to log
-        event = self.insertEvent("unblock", commitr, id, time)
+        # Add event to timelineLog
+        event = self.insertEvent("unblock", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Delete blocked relationship from dictionary if it exists
-        if (self.isBlocked(id, commitr)):
+        if (self.isBlocked(id, receiver)):
             for i in range(0, len(self.blockedUsers)):
-                if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == commitr):
+                if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
                     del self.blockedUsers[i]
                     break
 
@@ -205,10 +217,10 @@ class User:
         if(len(self.blockedUsers) == 0):
             self.blockedUsers = list()
 
-            # Add all tweets from this User's log if they have been given access to view
-            if(commitr == self.userId):
-                for event in self.log:
-                    if(event[2] == id and event[0] == "tweet"):
+            # Add all tweets from this User's timelineLog if they have been given access to view
+            if(receiver == self.userId):
+                for event in self.timelineLog:
+                    if(event[3] == id and event[0] == "tweet"):
                         self.tweets.append(event)
 
         self.pickleSelf()
@@ -219,23 +231,24 @@ class User:
     @param
         event: Event that accepted by a majority of acceptors
     @effects
-        Adds event to log if event does not exist already
+        Adds event to timelineLog if event does not exist already
         Adds tweet to tweets
         Updates dictionary based on block and unblock events
     @modifies 
-        log, tweets, and dictionary private fields
+        timelineLog, tweets, and dictionary private fields
     """
     def commit(self, event):
-        # Update log, tweets, and dictionary private fields
+        # Update timelineLog, tweets, and dictionary private fields
+        # Event: (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         if (event[0] == "tweet"):
-            print "Commited tweet event!"
-            # Add tweet to log and tweets
-            self.tweet(event[3], event[2], event[1])
+            print "Committed tweet event!"
+            # Add tweet to timelineLog and tweets
+            self.tweet(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "block"):
             print "Committed block event!"
-            # Add block to log and dictionary
-            self.block(event[3], event[2], event[1])
+            # Add block to timelineLog and dictionary
+            self.block(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "unblock"):
             print "Committed unblock event!"
-            # Add unblock to log and remove from dictionary
-            self.unblock(event[3], event[2], event[1])
+            # Add unblock to timelineLog and remove from dictionary
+            self.unblock(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
