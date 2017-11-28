@@ -58,7 +58,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 		data = self.recv(16384)
 		if data:
 			serializedMessage = dill.loads(data)
-			hey = site.receive(serializedMessage)
+			hey = site.commit(serializedMessage)
 
 class Server(asyncore.dispatcher_with_send):
 	def __init__(self, host, port):
@@ -114,9 +114,8 @@ class myThread (threading.Thread):
 					utcDatetime = datetime.datetime.utcnow()
 					utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-					site.tweet(utcTime, site.getId(), command[6:])
-					sendingPorts = site.getPorts()
-					self.tweetToAll(sendingPorts)
+					event = site.tweet(utcTime, site.getId(), command[6:])
+					self.commit(event)
 				elif command == "view":
 					site.view()
 				elif command == "quit":
@@ -129,24 +128,21 @@ class myThread (threading.Thread):
 
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
-					# print name
-					site.unblock(utcTime, site.getId(), ord(name[0])-65)
-					sendingPorts = site.getPorts()
-					self.tweetToAll(sendingPorts)
+					
+					event = site.unblock(utcTime, site.getId(), ord(name[0])-65)
+					self.commit(event)
 				elif command[:6] == "block ":
 					name = command[6:]
 					siteName = sys.argv[2]
 
 					utc_datetime = datetime.datetime.utcnow()
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
 					print "Blocking User: "+command[6:]
-					site.block(utcTime, site.getId(), ord(name[0])-65)
-					sendingPorts = site.getPorts()
-					self.tweetToAll(sendingPorts)
+					event = site.block(utcTime, site.getId(), ord(name[0])-65)
+					self.commit(event)
 				elif command == "View Log":
 					site.viewLog()
-				elif command == "View Clock":
-					site.viewMatrixClock()
 				elif command == "View Dictionary":
 					site.viewDictionary()
 
@@ -162,13 +158,12 @@ class myThread (threading.Thread):
 				asyncore.loop()
 
 	# Connect to all peers send them <msg>
-	def tweetToAll(self, sendingPorts):
+	def commit(self, event):
 		for index, peerPort in enumerate(self.peers): # avoid connecting to self
 
-			if peerPort != int(sys.argv[1]) and len(sendingPorts) == len(self.peers):
+			if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
 				# print "### Sending", msg, "to", peerPort
-				fullMessage = site.getLog()
- 				dilledMessage = dill.dumps(fullMessage)
+ 				dilledMessage = dill.dumps(event)
 				# c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
 				c = Client("", peerPort, dilledMessage)
 				asyncore.loop(timeout = 5, count = 1)
@@ -176,8 +171,7 @@ class myThread (threading.Thread):
 				nonBlockedPorts = site.getPorts()
 				check = (index in nonBlockedPorts)
 				if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
-					fullMessage = site.getLog()
-	 				dilledMessage = dill.dumps(fullMessage)
+	 				dilledMessage = dill.dumps(event)
 					c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
 					asyncore.loop(timeout =5, count = 1)
 
