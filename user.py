@@ -76,16 +76,17 @@ class User:
         if(not (eventRecord in self.timelineLog)):
             self.timelineLog.append(eventRecord)
         
-        # Add eventRecord to paxosLog or queue given unique
+        # Add eventRecord to paxosLog or queue
         if(committed):
             if(not (eventRecord in self.paxosLog)):
+                # Add event to paxosLog and tweets
                 self.paxosLog.append(eventRecord)
+                self.insertTweet(eventRecord)
         else:
             if(not (eventRecord in self.queue)):
+                # Add event to queue
                 self.queue.append(eventRecord)
-
-        # Add eventRecord to tweets
-        self.insertTweet(eventRecord)
+        
 
         self.pickleSelf()
 
