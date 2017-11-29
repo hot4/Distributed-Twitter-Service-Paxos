@@ -419,6 +419,28 @@ class User:
 
     """
     @param
+        proposals: Container of proposals accepted by a majority of acceptors
+    @return
+        Highest proposal accepted by some acceptor if one exists, None otherwise
+    """
+    def filterProposals(self, proposals):
+        maxAccNum = -1
+        maxAccVal = None
+
+        for i in range(0, len(proposals)):
+            # Check if current proposal is greater than maxAccNum
+            if(proposals[i][6] > maxAccNum):
+                # Store accNum and accVal from proposal
+                maxAccNum = proposals[i][7]
+                maxAccVal = proposals[i][8]
+
+        
+        # Highest proposal accepted by some acceptor if one exists, None otherwise
+        return maxAccVal
+
+
+    """
+    @param
         index: Index some proposer wishes to write an event to in paxosLog
         n: Proposal number from a proposer
         v: Proposal value from a proposer
