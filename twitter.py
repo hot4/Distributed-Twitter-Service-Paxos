@@ -143,7 +143,11 @@ class myThread (threading.Thread):
 					event = site.block(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
 					self.commit(event)
 				elif command == "View Log":
-					site.viewTimelineLog()
+					site.viewStableStorageLog()
+				elif command == "View Paxos":
+					site.viewPaxosLog()
+				elif command == "View Queue":
+					site.viewQueue()
 				elif command == "View Dictionary":
 					site.viewDictionary()
 
@@ -162,19 +166,19 @@ class myThread (threading.Thread):
 	def commit(self, event):
 		for index, peerPort in enumerate(self.peers): # avoid connecting to self
 
-			if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
+			# if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
 				# print "### Sending", msg, "to", peerPort
  				dilledMessage = dill.dumps(event)
 				# c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
 				c = Client("", peerPort, dilledMessage)
 				asyncore.loop(timeout = 5, count = 1)
-			else:
-				nonBlockedPorts = site.getPorts()
-				check = (index in nonBlockedPorts)
-				if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
-	 				dilledMessage = dill.dumps(event)
-					c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
-					asyncore.loop(timeout =5, count = 1)
+			# else:
+			# 	nonBlockedPorts = site.getPorts()
+			# 	check = (index in nonBlockedPorts)
+			# 	if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
+	 		#		dilledMessage = dill.dumps(event)
+			# 		c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
+			# 		asyncore.loop(timeout =5, count = 1)
 
 
 

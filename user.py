@@ -7,7 +7,7 @@ class User:
     def __init__(self, userId, peers, pickle=None, pickledUser=None):
         if pickle:
             # Load User from pickle
-            self.timelineLog = pickledUser['timelineLog']
+            self.stableStorageLog = pickledUser['stableStorageLog']
             self.blockedUsers = pickledUser['blockedUsers']
             self.userId = ord(userId) - 65
             self.peers = peers
@@ -15,8 +15,10 @@ class User:
             # Add events to (paxosLog and tweets) or queue and store last known empty log entry in paxosLog
             self.paxosLog = list()
             self.queue = list()
+            self.tweets = list()
             self.index = 0
-            for event in self.timelineLog:
+            for event in self.stableStorageLog:
+                # Check if event has been committed
                 if (event[1]):
                     # Add events to paxosLog and tweets
                     self.paxosLog.append(event)
@@ -33,7 +35,7 @@ class User:
         else:
             # Create User from scratch
             print "Creating user from scratch"
-            self.timelineLog = list()
+            self.stableStorageLog = list()
             self.paxosLog = list()
             self.queue = list()
             self.index = 0
@@ -44,7 +46,7 @@ class User:
 
     def pickleSelf(self):
         pickleSelf = {
-            "timelineLog": self.timelineLog,
+            "stableStorageLog": self.stableStorageLog,
             "blockedUsers": self.blockedUsers
         }
         pickle.dump(pickleSelf, open("pickledUser.p", "wb"))
@@ -61,32 +63,67 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects
-        Adds new eventRecord to timelineLog if it does not exist in the timelineLog already
+        Adds new eventRecord to stableStorageLog if it does not exist in the stableStorageLog already
         Adds new eventRecord to (paxosLog or queue) if it does not exist already based on committed
         Adds tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     @modifies
-        timelineLog, paxosLog, queue, and tweets private fields
+        stableStorageLog, paxosLog, queue, and tweets private fields
     @return 
         Newly created event record
     """
     def insertEvent(self, eventName, committed, message, id, time, index, maxPrepare, accNum, accVal):
         eventRecord = (eventName, committed, message, id, time, index, maxPrepare, accNum, accVal)        
         
-        # Add eventRecord to timelineLog
-        if(not (eventRecord in self.timelineLog)):
-            self.timelineLog.append(eventRecord)
+        # Update eventRecord in stableStorageLog
+        for i in range(0, len(self.stableStorageLog)):
+            # Check if current event is the eventRecord
+            if(self.stableStorageLog[i][5] == index):
+                # Update log enttry
+                self.stableStorageLog[i] = eventRecord
+                break
         
+        # Add eventRecord to stableStorageLog since it was not previously added
+        if(not (eventRecord in self.stableStorageLog)):
+            self.stableStorageLog.append(eventRecord)
+
         # Add eventRecord to paxosLog or queue
         if(committed):
             if(not (eventRecord in self.paxosLog)):
-                # Add event to paxosLog and tweets
-                self.paxosLog.append(eventRecord)
+                # Check if paxosLog is empty
+                if(not self.paxosLog):
+                    # Add event to paxosLog
+                    self.paxosLog.append(eventRecord)
+                # Check if paxosLog contains one element
+                elif(len(self.paxosLog) == 1):
+                    # Insert event to end of paxosLog
+                    if(self.paxosLog[0][5] < index):
+                        self.paxosLog.append(eventRecord)
+                    # Insert event to beginning of paxosLog
+                    else:  
+                        self.paxosLog.insert(0, eventRecord)
+                # Figure out where to insert event into paxosLog
+                else:
+                    index = -1
+                    for i in range(0, len(self.paxosLog)-1):
+                        # Check if event index is between neighbor events
+                        if(self.paxosLog[i][5] < index and self.paxosLog[i+1][5] > index):
+                            # Store index
+                            index = i
+                            break
+                    # Check if index was found to insert event into paxosLog
+                    if(index > 0):
+                        # Insert event in paxosLog as specified index
+                        self.paxosLog.insert(index, eventRecord)
+                    # Insert event to end of paxosLog
+                    else:
+                        self.paxosLog.append(eventRecord)
+
+                # Add event to tweets
                 self.insertTweet(eventRecord)
         else:
             if(not (eventRecord in self.queue)):
                 # Add event to queue
                 self.queue.append(eventRecord)
-        
 
         self.pickleSelf()
 
@@ -96,11 +133,50 @@ class User:
     @param
         event: Event that has occurred by some User
     @effects
-        Adds event to tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
+        If event exists in tweets, update committed status
+        Else add event to tweets
+    @modifies
+        tweets private field
     """
     def insertTweet(self, event):
-        if (event[0] == "tweet" and not (self.isBlocked(event[3], self.userId)) and not (event in self.tweets)):
-            self.tweets.append(event)
+        # Check if event is a tweet and originator of tweet is not blocking this User
+        if (event[0] == "tweet" and not (self.isBlocked(event[3], self.userId))):
+            for i in range(0, len(self.tweets)):
+                # Check if current event is the event
+                if(self.tweets[i][5] == event[5]):
+                    # Update tweet entry
+                    self.tweets[i] = event
+                    break
+
+            # Insert event into tweets since it was not previously added
+            if(not (event in self.tweets)):
+                # Check if tweets is empty
+                if (not self.tweets):
+                    self.tweets.append(event)
+                # Check if tweets contains one element
+                elif(len(self.tweets) == 1):
+                    # Insert event to end of tweets
+                    if(self.tweets[0][5] < event[5]):
+                        self.tweets.append(event)
+                    # Insert event to beginning of tweets
+                    else:
+                        self.tweets.insert(0, event)
+                # Figure out where to insert event into tweets
+                else:
+                    index = -1
+                    for i in range(0, len(self.tweets)) - 1:
+                        # Check if event index is between neighbor events
+                        if(self.tweets[i][5] < index and self.tweets[i+1][5] > index):
+                            # Store index
+                            index = i
+                            break
+                    # Check if index was found to insert event into tweets
+                    if(index > 0):
+                        # Insert event in tweets at specified index
+                        self.tweets.insert(index, eventRecord)
+                    # Insert event to end of tweets
+                    else:
+                        self.tweets.append(eventRecord)
 
     """
     @return
@@ -128,16 +204,19 @@ class User:
         Prints all tweets in tweets
     """
     def view(self):
-        print "View command was selected\n"
+        if(not self.tweets):
+            print "No tweets are available to view"
         for tweet in self.tweets:
             print tweet
 
     """
     @effects 
-        Prints all events in the timelineLog
+        Prints all events in the stableStorageLog
     """
-    def viewTimelineLog(self):
-        for event in self.timelineLog:
+    def viewStableStorageLog(self):
+        if(not self.stableStorageLog):
+            print "No events are stored in stable storage"
+        for event in self.stableStorageLog:
             print event
 
     """
@@ -145,7 +224,19 @@ class User:
         Prints all events in the paxosLog
     """
     def viewPaxosLog(self):
+        if(not self.paxosLog):
+            print "No events are stored in paxos log"
         for event in self.paxosLog:
+            print event
+
+    """
+    @effects 
+        Prints all events in the queue
+    """
+    def viewQueue(self):
+        if(not self.queue):
+            print "No events are stored in the queue"
+        for event in self.queue:
             print event
 
     """
@@ -153,6 +244,8 @@ class User:
         Prints all blocks in the dictionary
     """
     def viewDictionary(self):   
+        if(not self.blockedUsers):
+            print "No blocked relations are stored in the dictionary"
         for block in self.blockedUsers:
             print block
 
@@ -168,16 +261,15 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects 
-        Adds tweet to timelineLog, (paxosLog or queue), and tweets private fields if unique
+        Adds tweet to stableStorageLog, (paxosLog or queue), and tweets private fields if unique
     @modifies 
-        timelineLog, (paxosLog or queue), and tweets private fields
+        stableStorageLog, (paxosLog or queue), and tweets private fields
     @return 
         Tweet event record
     """
     def tweet(self, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
-        # Add event to timelineLog, paxosLog, queue, and tweets if unique
-        event = self.insertEvent("tweet", commmitted, message, id, time, index, maxPrepare, accNum, accVal)
-        return event
+        # Add event to stableStorageLog, paxosLog, queue, and tweets if unique
+        return self.insertEvent("tweet", commmitted, message, id, time, index, maxPrepare, accNum, accVal)
 
     """
     @param
@@ -190,6 +282,7 @@ class User:
     """
     def isBlocked(self, id, receiver):
         for i in range(0, len(self.blockedUsers)):
+            # Check if there exists a blocked relationship where (id, receiver)
             if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
                 return True
         return False
@@ -206,18 +299,15 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects 
-        Adds event to timelineLog, (paxosLog or queue) if unique
+        Adds event to stableStorageLog, (paxosLog or queue) if unique
         Adds block relationship to dictionary if one does not exist already
     @modifies 
-        timelineLog, (paxosLog or queue), and blockedUsers private field
+        stableStorageLog, (paxosLog or queue), and blockedUsers private field
     @return
         Block event record
     """
     def block(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        if(id == self.userId):
-            print "Blocked User %d\n" % (receiver)
-
-        # Add event to timelineLog and paxosLog if unique
+        # Add event to stableStorageLog and paxosLog if unique
         event = self.insertEvent("block", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Add block to dictionary if it does not exist already
@@ -227,9 +317,12 @@ class User:
             # Remove all tweets from this User's tweets if they have been revoked access to view
             if(receiver == self.userId):
                 for i in range(0, len(self.tweets)):
+                    # Check if tweet's creator equals id
                     if(self.tweets[i][3] == id):
+                        # Delete tweet from tweets
                         del self.tweets[i]
 
+        # Update dictionary
         self.pickleSelf()
 
         return event
@@ -246,24 +339,23 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects
-        Adds event to timelineLog and (paxosLog or queue) if unique
+        Adds event to stableStorageLog and (paxosLog or queue) if unique
         Removes blocked relationship from dictionary if one exists
     @modifies
-        timelineLog, (paxosLog or queue), and blockedUsers private fields
+        stableStorageLog, (paxosLog or queue), and blockedUsers private fields
     @return
         Unblock event record
     """
     def unblock(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        if(id != self.userId):
-            print "Unblocked User %d\n" % (receiver)
-
-        # Add event to timelineLog and paxosLog if unique
+        # Add event to stableStorageLog and paxosLog if unique
         event = self.insertEvent("unblock", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Delete blocked relationship from dictionary if it exists
         if (self.isBlocked(id, receiver)):
             for i in range(0, len(self.blockedUsers)):
+                # Check if there exists a blocked relationship (id, receiver)
                 if(self.blockedUsers[i][0] == id and self.blockedUsers[i][1] == receiver):
+                    # Delete blocked relationship from dictionary
                     del self.blockedUsers[i]
                     break
 
@@ -271,12 +363,15 @@ class User:
         if(len(self.blockedUsers) == 0):
             self.blockedUsers = list()
 
-            # Add all tweets from this User's timelineLog if they have been given access to view
+            # Add all tweets from this User's paxosLog if they have been given access to view
             if(receiver == self.userId):
-                for event in self.timelineLog:
+                for event in self.paxosLog:
+                    # Check if tweet's creator equals id and if event is a tweet
                     if(event[3] == id and event[0] == "tweet"):
-                        self.tweets.append(event)
+                        # Insert tweet to tweets
+                        self.insertTweet(event)
 
+        # Update dictionary
         self.pickleSelf()
 
         return event
@@ -287,15 +382,39 @@ class User:
         n: Proposal number from a proposer
     @effects
         Checks if User has accepted some proposal with number and value based on index
+    @modifies
+        stableStorageLog and queue private fields
     @return
         If the User has accepted some number and value, that proposal will be returned given n is greater than maxPrepare
         Else (None, None)
     """
     def prepare(self, index, n):
-        for event in queue:
+        for i in range(0, len(self.queue)):
             # Check if event has been accepted and proposal number exceeds maxPrepare based on index
-            if(event[5] == index and n > event[6]):
+            if(self.queue[i][5] == index and n > self.queue[i][6]):
+                # Update maxPrepare for proposal in stableStorageLog
+                for i in range(0, len(self.stableStorageLog)):
+                    # Check if current event is the event
+                    if(self.stableStorageLog[i][5] == index):
+                        # Update maxPrepare
+                        self.stableStorageLog[i][6] = n
+                        break
+
+                # Update stable storage
+                self.pickleSelf()
+
+                # Update maxPrepare for proposal in queue
+                for i in range(0, len(self.queue)):
+                    # Check if current event is the event
+                    if(self.queue[i][5] == index):
+                        # Update maxPrepare
+                        self.queue[i][6] = n
+                        break
+
+                # Highest proposal less than n that this User has accepted
                 return (event[7], event[8])
+
+        # This User has not accepted any proposal for such index
         return (None, None)
 
     """
@@ -303,62 +422,68 @@ class User:
         index: Index some proposer wishes to write an event to in paxosLog
         n: Proposal number from a proposer
         v: Proposal value from a proposer
-        container: Container of events
-    @effects
-        Modifies proposal in list with n and v based on index
-    """
-    def updateProposal(self, index, n, v, container):
-        for i in range(0, len(container)):
-            # Check if event should be updated with (n, v) if n is greater than or equal to maxPrepare of proposal based on index
-            if(container[i][5] == index and n >= container[6]):
-                # Update maxPrepare of proposal
-                container[i][6] = n
-                # Update accNum of proposal
-                container[i][7] = n
-                # Update accVal of proposal
-                container[i][8] = v
-
-    """
-    @param
-        index: Index some proposer wishes to write an event to in paxosLog
-        n: Proposal number from a proposer
-        v: Proposal value from a proposer
     @effets
-        Modifies proposal in timelineLog and queue with n and v based on index
+        Modifies proposal in stableStorageLog and queue with n and v based on index
     @modifies
-        timelineLog and queue private fields
+        stableStorageLog and queue private fields
     """
     def accept(self, index, n, v):
-        updateProposal(index, n, v, self.timelineLog)
-        updateProposal(index, n, v, self.queue)
+        for i in range(0, len(self.stableStorageLog)):
+            # Check if current event is the event
+            if(self.stableStorageLog[i][5] == index):
+                # Update accNum and accVal
+                self.stableStorageLog[7] = n
+                self.stableStorageLog[8] = v
+                break
+
+        # Update stable storage
+        self.pickleSelf()
+
+        for i in range(0, len(self.queue)):
+            # Check if current event is the event
+            if(self.queue[i][5] == index):
+                # Update accNum and accVal
+                self.queue[7] = n
+                self.queue[8] = v
+                break
+
+        # Update dictionary
+        self.pickleSelf()
+
 
     """
     @param
         event: Event that accepted by a majority of acceptors
     @effects
         Increments last known empty log entry in paxosLog
-        Adds event to timelineLog and paxosLog
+        Adds event to stableStorageLog and paxosLog
         Removes event from queue
         Adds tweet to tweets if
         Updates dictionary based on block and unblock events
     @modifies 
-        index, timelineLog, paxosLog, queue, tweets, and dictionary private fields
+        index, stableStorageLog, paxosLog, queue, tweets, and dictionary private fields
     """
     def commit(self, event):
-        # Increment last known emtpy log entry in paxosLog
-        self.index = self.index+1
-
-        # Add event to timelineLog, paxosLog, and, (tweets or dictionary)
+        # Add event to paxosLog, and (tweets or dictionary)
+        # Update event in stableStorageLog
         # Event: (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         if (event[0] == "tweet"):
             print "Committed tweet event!"
-            # Add tweet to timelineLog and tweets
+            # Add tweet to paxosLog, and tweets
             self.tweet(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "block"):
             print "Committed block event!"
-            # Add block to timelineLog and dictionary
+            # Add block to paxosLog, and dictionary
             self.block(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
         if(event[0] == "unblock"):
             print "Committed unblock event!"
-            # Add unblock to timelineLog and remove from dictionary
+            # Add unblock to paxosLog, and remove from dictionary
             self.unblock(True, event[2], event[3], event[4], event[5], event[6], event[7], event[8])
+
+        # Index is either the increment of this User's index or event's index value
+        self.index = max(self.index+1, event[5]+1)
+
+        # Delete event from queue since it has been stored in paxosLog
+        for i in range(0, len(self.queue)):
+            if(self.queue[i][5] == event[5]):
+                del self.queue[i]
