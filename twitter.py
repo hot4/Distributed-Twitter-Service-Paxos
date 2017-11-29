@@ -143,7 +143,7 @@ class myThread (threading.Thread):
 					event = site.block(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
 					self.commit(event)
 				elif command == "View Log":
-					site.viewStableStorageLog()
+					site.viewWriteAheadLog()
 				elif command == "View Paxos":
 					site.viewPaxosLog()
 				elif command == "View Queue":
