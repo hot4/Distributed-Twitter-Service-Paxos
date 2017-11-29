@@ -7,7 +7,8 @@ class User:
     def __init__(self, userId, peers, pickle=None, pickledUser=None):
         if pickle:
             # Load User from pickle
-            self.stableStorageLog = pickledUser['stableStorageLog']
+            self.writeAheadLog = pickledUser['writeAheadLog']
+            self.checkpoint = len(self.writeAheadLog) % 5
             self.blockedUsers = pickledUser['blockedUsers']
             self.userId = ord(userId) - 65
             self.peers = peers
@@ -17,7 +18,7 @@ class User:
             self.queue = list()
             self.tweets = list()
             self.index = 0
-            for event in self.stableStorageLog:
+            for event in self.writeAheadLog:
                 # Check if event has been committed
                 if (event[1]):
                     # Add events to paxosLog and tweets
@@ -35,7 +36,8 @@ class User:
         else:
             # Create User from scratch
             print "Creating user from scratch"
-            self.stableStorageLog = list()
+            self.writeAheadLog = list()
+            self.checkpoint = 1
             self.paxosLog = list()
             self.queue = list()
             self.index = 0
@@ -44,12 +46,18 @@ class User:
             self.userId = ord(userId) - 65
             self.peers = peers
 
-    def pickleSelf(self):
-        pickleSelf = {
-            "stableStorageLog": self.stableStorageLog,
+    def pickleWriteAhead(self):
+        pickleWriteAhead = {
+            "writeAheadLog": self.writeAheadLog
+        }
+        pickle.dump(pickleWriteAhead, open("pickledUser.p", "wb"))
+
+    def pickleCheckpoint(self):
+        pickleCheckpoint = {
+            "tweets": self.tweets,
             "blockedUsers": self.blockedUsers
         }
-        pickle.dump(pickleSelf, open("pickledUser.p", "wb"))
+        pickle.dump(pickleCheckpoint, open("pickledUser.p", "wb"))
 
     """
     @param 
@@ -63,28 +71,40 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects
-        Adds new eventRecord to stableStorageLog if it does not exist in the stableStorageLog already
+        Adds new eventRecord to writeAheadLog if it does not exist in the writeAheadLog already
         Adds new eventRecord to (paxosLog or queue) if it does not exist already based on committed
         Adds tweets if eventName is tweet and this User is being blocked by creator of tweet and tweet is not in tweets already
     @modifies
-        stableStorageLog, paxosLog, queue, and tweets private fields
+        writeAheadLog, paxosLog, queue, and tweets private fields
     @return 
         Newly created event record
     """
     def insertEvent(self, eventName, committed, message, id, time, index, maxPrepare, accNum, accVal):
         eventRecord = (eventName, committed, message, id, time, index, maxPrepare, accNum, accVal)        
         
-        # Update eventRecord in stableStorageLog
-        for i in range(0, len(self.stableStorageLog)):
+        # Update eventRecord in writeAheadLog
+        for i in range(0, len(self.writeAheadLog)):
             # Check if current event is the eventRecord
-            if(self.stableStorageLog[i][5] == index):
+            if(self.writeAheadLog[i][5] == index):
                 # Update log enttry
-                self.stableStorageLog[i] = eventRecord
+                self.writeAheadLog[i] = eventRecord
                 break
         
-        # Add eventRecord to stableStorageLog since it was not previously added
-        if(not (eventRecord in self.stableStorageLog)):
-            self.stableStorageLog.append(eventRecord)
+        # Add eventRecord to writeAheadLog since it was not previously added
+        if(not (eventRecord in self.writeAheadLog)):
+            self.writeAheadLog.append(eventRecord)
+
+        # Update write ahead in stable storage
+        self.pickleWriteAhead()
+
+        # Increment amount events that have occurred
+        self.checkpoint = self.checkpoint + 1
+
+        # Check if 5 events have occurred
+        if((self.checkpoint % 5) == 0):
+            # Update checkpoint in stable storage
+            self.pickleCheckpoint()
+            self.checkpoint = 1
 
         # Add eventRecord to paxosLog or queue
         if(committed):
@@ -124,8 +144,6 @@ class User:
             if(not (eventRecord in self.queue)):
                 # Add event to queue
                 self.queue.append(eventRecord)
-
-        self.pickleSelf()
 
         return eventRecord
 
@@ -211,12 +229,12 @@ class User:
 
     """
     @effects 
-        Prints all events in the stableStorageLog
+        Prints all events in the writeAheadLog
     """
-    def viewStableStorageLog(self):
-        if(not self.stableStorageLog):
+    def viewWriteAheadLog(self):
+        if(not self.writeAheadLog):
             print "No events are stored in stable storage"
-        for event in self.stableStorageLog:
+        for event in self.writeAheadLog:
             print event
 
     """
@@ -261,14 +279,14 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects 
-        Adds tweet to stableStorageLog, (paxosLog or queue), and tweets private fields if unique
+        Adds tweet to writeAheadLog, (paxosLog or queue), and tweets private fields if unique
     @modifies 
-        stableStorageLog, (paxosLog or queue), and tweets private fields
+        writeAheadLog, (paxosLog or queue), and tweets private fields
     @return 
         Tweet event record
     """
     def tweet(self, commmitted, message, id, time, index, maxPrepare, accNum, accVal):
-        # Add event to stableStorageLog, paxosLog, queue, and tweets if unique
+        # Add event to writeAheadLog, paxosLog, queue, and tweets if unique
         return self.insertEvent("tweet", commmitted, message, id, time, index, maxPrepare, accNum, accVal)
 
     """
@@ -299,15 +317,15 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects 
-        Adds event to stableStorageLog, (paxosLog or queue) if unique
+        Adds event to writeAheadLog, (paxosLog or queue) if unique
         Adds block relationship to dictionary if one does not exist already
     @modifies 
-        stableStorageLog, (paxosLog or queue), and blockedUsers private field
+        writeAheadLog, (paxosLog or queue), and blockedUsers private field
     @return
         Block event record
     """
     def block(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        # Add event to stableStorageLog and paxosLog if unique
+        # Add event to writeAheadLog and paxosLog if unique
         event = self.insertEvent("block", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Add block to dictionary if it does not exist already
@@ -321,9 +339,6 @@ class User:
                     if(self.tweets[i][3] == id):
                         # Delete tweet from tweets
                         del self.tweets[i]
-
-        # Update dictionary
-        self.pickleSelf()
 
         return event
 
@@ -339,15 +354,15 @@ class User:
         accNum: Accepted number for event
         accVal: Accepted value for event
     @effects
-        Adds event to stableStorageLog and (paxosLog or queue) if unique
+        Adds event to writeAheadLog and (paxosLog or queue) if unique
         Removes blocked relationship from dictionary if one exists
     @modifies
-        stableStorageLog, (paxosLog or queue), and blockedUsers private fields
+        writeAheadLog, (paxosLog or queue), and blockedUsers private fields
     @return
         Unblock event record
     """
     def unblock(self, commmitted, receiver, id, time, index, maxPrepare, accNum, accVal):
-        # Add event to stableStorageLog and paxosLog if unique
+        # Add event to writeAheadLog and paxosLog if unique
         event = self.insertEvent("unblock", commmitted, receiver, id, time, index, maxPrepare, accNum, accVal)
 
         # Delete blocked relationship from dictionary if it exists
@@ -371,9 +386,6 @@ class User:
                         # Insert tweet to tweets
                         self.insertTweet(event)
 
-        # Update dictionary
-        self.pickleSelf()
-
         return event
 
     """
@@ -383,7 +395,7 @@ class User:
     @effects
         Checks if User has accepted some proposal with number and value based on index
     @modifies
-        stableStorageLog and queue private fields
+        writeAheadLog and queue private fields
     @return
         If the User has accepted some number and value, that proposal will be returned given n is greater than maxPrepare
         Else (None, None)
@@ -392,16 +404,16 @@ class User:
         for i in range(0, len(self.queue)):
             # Check if event has been accepted and proposal number exceeds maxPrepare based on index
             if(self.queue[i][5] == index and n > self.queue[i][6]):
-                # Update maxPrepare for proposal in stableStorageLog
-                for i in range(0, len(self.stableStorageLog)):
+                # Update maxPrepare for proposal in writeAheadLog
+                for i in range(0, len(self.writeAheadLog)):
                     # Check if current event is the event
-                    if(self.stableStorageLog[i][5] == index):
+                    if(self.writeAheadLog[i][5] == index):
                         # Update maxPrepare
-                        self.stableStorageLog[i][6] = n
+                        self.writeAheadLog[i][6] = n
                         break
 
-                # Update stable storage
-                self.pickleSelf()
+                # Update write ahead in stable storage
+                self.pickleWriteAhead()
 
                 # Update maxPrepare for proposal in queue
                 for i in range(0, len(self.queue)):
@@ -421,7 +433,7 @@ class User:
     @param
         proposals: Container of proposals accepted by a majority of acceptors
     @return
-        Highest proposal accepted by some acceptor if one exists, None otherwise
+        Highest proposal value accepted by some acceptor if one exists, None otherwise
     """
     def filterProposals(self, proposals):
         maxAccNum = -1
@@ -435,7 +447,7 @@ class User:
                 maxAccVal = proposals[i][8]
 
         
-        # Highest proposal accepted by some acceptor if one exists, None otherwise
+        # Highest proposal value accepted by some acceptor if one exists, None otherwise
         return maxAccVal
 
 
@@ -445,21 +457,21 @@ class User:
         n: Proposal number from a proposer
         v: Proposal value from a proposer
     @effets
-        Modifies proposal in stableStorageLog and queue with n and v based on index
+        Modifies proposal in writeAheadLog and queue with n and v based on index
     @modifies
-        stableStorageLog and queue private fields
+        writeAheadLog and queue private fields
     """
     def accept(self, index, n, v):
-        for i in range(0, len(self.stableStorageLog)):
+        for i in range(0, len(self.writeAheadLog)):
             # Check if current event is the event
-            if(self.stableStorageLog[i][5] == index):
+            if(self.writeAheadLog[i][5] == index):
                 # Update accNum and accVal
-                self.stableStorageLog[7] = n
-                self.stableStorageLog[8] = v
+                self.writeAheadLog[7] = n
+                self.writeAheadLog[8] = v
                 break
 
-        # Update stable storage
-        self.pickleSelf()
+        # Update write ahead in stable storage
+        self.pickleWriteAhead()
 
         for i in range(0, len(self.queue)):
             # Check if current event is the event
@@ -469,25 +481,21 @@ class User:
                 self.queue[8] = v
                 break
 
-        # Update dictionary
-        self.pickleSelf()
-
-
     """
     @param
         event: Event that accepted by a majority of acceptors
     @effects
         Increments last known empty log entry in paxosLog
-        Adds event to stableStorageLog and paxosLog
+        Adds event to writeAheadLog and paxosLog
         Removes event from queue
         Adds tweet to tweets if
         Updates dictionary based on block and unblock events
     @modifies 
-        index, stableStorageLog, paxosLog, queue, tweets, and dictionary private fields
+        index, writeAheadLog, paxosLog, queue, tweets, and dictionary private fields
     """
     def commit(self, event):
         # Add event to paxosLog, and (tweets or dictionary)
-        # Update event in stableStorageLog
+        # Update event in writeAheadLog
         # Event: (eventName, commmitted, message, id, time, index, maxPrepare, accNum, accVal)
         if (event[0] == "tweet"):
             print "Committed tweet event!"
