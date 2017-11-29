@@ -144,6 +144,10 @@ class myThread (threading.Thread):
 					self.commit(event)
 				elif command == "View Log":
 					site.viewStableStorageLog()
+				elif command == "View Paxos":
+					site.viewPaxosLog()
+				elif command == "View Queue":
+					site.viewQueue()
 				elif command == "View Dictionary":
 					site.viewDictionary()
 

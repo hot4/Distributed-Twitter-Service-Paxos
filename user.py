@@ -90,7 +90,7 @@ class User:
         if(committed):
             if(not (eventRecord in self.paxosLog)):
                 # Check if paxosLog is empty
-                if(len(self.paxosLog) == 0):
+                if(not self.paxosLog):
                     # Add event to paxosLog
                     self.paxosLog.append(eventRecord)
                 # Check if paxosLog contains one element
@@ -151,7 +151,7 @@ class User:
             # Insert event into tweets since it was not previously added
             if(not (event in self.tweets)):
                 # Check if tweets is empty
-                if (len(self.tweets) == 0):
+                if (not self.tweets):
                     self.tweets.append(event)
                 # Check if tweets contains one element
                 elif(len(self.tweets) == 1):
@@ -204,6 +204,8 @@ class User:
         Prints all tweets in tweets
     """
     def view(self):
+        if(not self.tweets):
+            print "No tweets are available to view"
         for tweet in self.tweets:
             print tweet
 
@@ -212,6 +214,8 @@ class User:
         Prints all events in the stableStorageLog
     """
     def viewStableStorageLog(self):
+        if(not self.stableStorageLog):
+            print "No events are stored in stable storage"
         for event in self.stableStorageLog:
             print event
 
@@ -220,7 +224,19 @@ class User:
         Prints all events in the paxosLog
     """
     def viewPaxosLog(self):
+        if(not self.paxosLog):
+            print "No events are stored in paxos log"
         for event in self.paxosLog:
+            print event
+
+    """
+    @effects 
+        Prints all events in the queue
+    """
+    def viewQueue(self):
+        if(not self.queue):
+            print "No events are stored in the queue"
+        for event in self.queue:
             print event
 
     """
@@ -228,6 +244,8 @@ class User:
         Prints all blocks in the dictionary
     """
     def viewDictionary(self):   
+        if(not self.blockedUsers):
+            print "No blocked relations are stored in the dictionary"
         for block in self.blockedUsers:
             print block
 
