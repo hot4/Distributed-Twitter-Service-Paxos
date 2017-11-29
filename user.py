@@ -74,18 +74,18 @@ class User:
     def insertEvent(self, eventName, committed, message, id, time, index, maxPrepare, accNum, accVal):
         eventRecord = (eventName, committed, message, id, time, index, maxPrepare, accNum, accVal)        
         
-        # Add eventRecord to stableStorageLog
+        # Update eventRecord in stableStorageLog
+        for i in range(0, len(self.stableStorageLog)):
+            # Check if current event is the eventRecord
+            if(self.stableStorageLog[i][5] == index):
+                # Update log enttry
+                self.stableStorageLog[i] = eventRecord
+                break
+        
+        # Add eventRecord to stableStorageLog since it was not previously added
         if(not (eventRecord in self.stableStorageLog)):
             self.stableStorageLog.append(eventRecord)
-        # Update eventRecord in stableStorageLog
-        else:
-            for i in range(0, len(self.stableStorageLog)):
-                # Check if current event is the eventRecord
-                if(self.stableStorageLog[i][5] == index):
-                    # Update committed field
-                    self.stableStorageLog[i][1] = committed
-                    break
-        
+
         # Add eventRecord to paxosLog or queue
         if(committed):
             if(not (eventRecord in self.paxosLog)):
@@ -104,8 +104,10 @@ class User:
                 # Figure out where to insert event into paxosLog
                 else:
                     index = -1
-                    for i in range(0, len(self.paxosLog)) - 1:
+                    for i in range(0, len(self.paxosLog)-1):
+                        # Check if event index is between neighbor events
                         if(self.paxosLog[i][5] < index and self.paxosLog[i+1][5] > index):
+                            # Store index
                             index = i
                             break
                     # Check if index was found to insert event into paxosLog
@@ -142,39 +144,39 @@ class User:
             for i in range(0, len(self.tweets)):
                 # Check if current event is the event
                 if(self.tweets[i][5] == event[5]):
-                    # Update committed field
-                    self.tweets[i][1] = event[1]
+                    # Update tweet entry
+                    self.tweets[i] = event
                     break
 
-        # Insert event into tweets since it was not previously added
-        if(not (event in self.tweets)):
-            # self.tweets.append(event)
-            # Check if tweets is empty
-            if (len(self.tweets) == 0):
-                self.tweets.append(event)
-            # Check if tweets contains one element
-            elif(len(self.tweets) == 1):
-                # Insert event to end of tweets
-                if(self.tweets[0][5] < event[5]):
+            # Insert event into tweets since it was not previously added
+            if(not (event in self.tweets)):
+                # Check if tweets is empty
+                if (len(self.tweets) == 0):
                     self.tweets.append(event)
-                # Insert event to beginning of tweets
+                # Check if tweets contains one element
+                elif(len(self.tweets) == 1):
+                    # Insert event to end of tweets
+                    if(self.tweets[0][5] < event[5]):
+                        self.tweets.append(event)
+                    # Insert event to beginning of tweets
+                    else:
+                        self.tweets.insert(0, event)
+                # Figure out where to insert event into tweets
                 else:
-                    self.tweets.insert(0, event)
-            # Figure out where to insert event into tweets
-            else:
-                index = -1
-                for i in range(0, len(self.tweets)) - 1:
-                    if(self.tweets[i][5] < index and self.tweets[i+1][5] > index):
-                        index = i
-                        break
-                # Check if index was found to insert event into tweets
-                if(index > 0):
-                    # Insert event in tweets at specified index
-                    self.tweets.insert(index, eventRecord)
-                # Insert event to end of tweets
-                else:
-                    self.tweets.append(eventRecord)
-
+                    index = -1
+                    for i in range(0, len(self.tweets)) - 1:
+                        # Check if event index is between neighbor events
+                        if(self.tweets[i][5] < index and self.tweets[i+1][5] > index):
+                            # Store index
+                            index = i
+                            break
+                    # Check if index was found to insert event into tweets
+                    if(index > 0):
+                        # Insert event in tweets at specified index
+                        self.tweets.insert(index, eventRecord)
+                    # Insert event to end of tweets
+                    else:
+                        self.tweets.append(eventRecord)
 
     """
     @return
@@ -209,7 +211,7 @@ class User:
     @effects 
         Prints all events in the stableStorageLog
     """
-    def viewstableStorageLog(self):
+    def viewStableStorageLog(self):
         for event in self.stableStorageLog:
             print event
 
@@ -348,8 +350,8 @@ class User:
                 for event in self.paxosLog:
                     # Check if tweet's creator equals id and if event is a tweet
                     if(event[3] == id and event[0] == "tweet"):
-                        # Add tweet to tweets
-                        self.tweets.append(event)
+                        # Insert tweet to tweets
+                        self.insertTweet(event)
 
         # Update dictionary
         self.pickleSelf()
