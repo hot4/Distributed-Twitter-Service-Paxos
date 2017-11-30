@@ -246,23 +246,27 @@ if __name__ == "__main__":
 	# 	print "Site pickle doesn't exist. Creating user from scratch."
 	# 	allIds = commandThread.peers
 	# 	site = User(sys.argv[2][0], allIds, False, None)
+	userId = ord(sys.argv[2][0]) - 65
+	fileExt = str(userId) + ".p"
 	pickledWriteAheadLog = None
 	pickledCheckpoint = None
 
 	try:
 		# Try opening pickledWriteAheadLog file
-		pickledWriteAheadLog = pickle.load(open("pickledWriteAheadLog.p", "rb"))
+		fileName = "pickledWriteAheadLog" + fileExt
+		pickledWriteAheadLog = pickle.load(open(fileName, "rb"))
 	except IOError:
 		print "pickledWriteAheadLog file does not exist"
 	
 	try:
 		# Try opening pickledCheckpoint file
-		pickledCheckpoint = pickle.load(open("pickledCheckpoint.p", "rb"))
+		fileName = "pickledCheckpoint" + fileExt
+		pickledCheckpoint = pickle.load(open(fileName, "rb"))
 	except IOError:
 		print "pickledCheckpoint file does not exist"
 
 	allIds = commandThread.peers
-	site = User(sys.argv[2][0], allIds, pickledWriteAheadLog, pickledCheckpoint)
+	site = User(userId, allIds, pickledWriteAheadLog, pickledCheckpoint)
 
 
 
