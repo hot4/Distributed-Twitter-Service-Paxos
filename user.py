@@ -3,7 +3,7 @@ import time
 import pickle
 
 class User:
-
+  
     def __init__(self, userId, peers, pickledWriteAheadLog, pickledCheckpoint):
         # Initiate private fields
         self.writeAheadLog = list()
@@ -55,11 +55,13 @@ class User:
         }
         pickle.dump(pickleWriteAheadLog, open("pickledWriteAheadLog.p", "wb"))
 
+
     def pickleCheckpoint(self):
         pickleCheckpoint = {
             "tweets": self.tweets,
             "blockedUsers": self.blockedUsers
         }
+
         pickle.dump(pickleCheckpoint, open("pickledCheckpoint.p", "wb"))
         
     """
@@ -92,7 +94,7 @@ class User:
 
         # Update writeAheadLog
         self.pickleWriteAheadLog()
-
+        
     """
     @param
         proposal: Proposal that was accepted by a majority of acceptors
@@ -231,7 +233,7 @@ class User:
             print "No proposals are stored in stable storage"
         for proposal in self.writeAheadLog:
             print proposal
-
+            
     """
     @effects
         Prints all blocks in the dictionary
@@ -244,6 +246,7 @@ class User:
 
     """
     @param
+
         index: Index some proposer wishes to write a proposal to in writeAheadLog
         n: Proposal number from a proposer
     @effects
@@ -276,7 +279,7 @@ class User:
     @param
         proposals: Container of proposals accepted by a majority of acceptors
     @return
-        Highest proposal accepted by some acceptor if one exists, None otherwise
+        Highest proposal value accepted by some acceptor if one exists, None otherwise
     """
     def filterProposals(self, proposals):
         maxAccNum = -1
@@ -290,7 +293,7 @@ class User:
                 maxAccNum = proposals[i][0]
                 maxAccVal = proposals[i][1]
         
-        # Highest proposal accepted by some acceptor if one exists, None otherwise
+        # Highest proposal value accepted by some acceptor if one exists, None otherwise
         return maxAccVal
 
 
