@@ -158,7 +158,6 @@ class User:
     def updateBlockedUsers(self, proposal):
         # proposal --> (index, maxPrepare, accNum, accVal)
         # proposal[3] --> (eventName, message, id, time)
-
         # Check if proposal is block
         if(proposal[3][0] == "block"):
             # Check if block does not exist already
@@ -166,13 +165,18 @@ class User:
                 # Add block to blockedUsers
                 self.blockedUsers.append((proposal[3][2], proposal[3][1]))
 
-                # Remove all tweets from this User's tweets if they have been revoked access to view
+                # Check if recipient of block is this User
                 if(proposal[3][1] == self.userId):
                     # tweets[i] --> (index, maxPrepare, accNum, accVal)
                     # tweets[i][3] --> (eventName, message, id, time)
-                    for i in range(0, len(self.tweets)):
-                        if(self.tweets[i][3][1]):
+                    i = 0
+                    while i < len(self.tweets):
+                        # Check if creator of tweet is creator of block
+                        if(self.tweets[i][3][2] == proposal[3][2]):
+                            # Delete originator's tweet from tweets
                             del self.tweets[i]
+                        else:
+                            i = i+1
         # Check if proposal is unblock
         elif(proposal[3][0] == "unblock"):
             # Check if block exists
@@ -191,7 +195,7 @@ class User:
                 for proposalItem in self.writeAheadLog:
                     # Check if creator of tweet is creator of unblock
                     if(proposalItem[3][2] == proposal[3][2]):
-                        self.insertTweets(proposal)
+                        self.insertTweets(proposalItem)
 
     """
     @return
