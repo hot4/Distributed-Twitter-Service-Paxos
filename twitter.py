@@ -58,7 +58,16 @@ class EchoHandler(asyncore.dispatcher_with_send):
 		data = self.recv(16384)
 		if data:
 			serializedMessage = dill.loads(data)
-			hey = site.commit(serializedMessage)
+
+			# FILTER RECEIVES
+			# Commit proposal to writeAheadLog
+			myProposalCommitted = site.commit(serializedMessage)
+			# Check if this User's proposal was committed
+			if(myProposalCommitted):
+				print "Your proposal was commited"
+			else:
+				print "Your proposal was not commited"
+
 
 class Server(asyncore.dispatcher_with_send):
 	def __init__(self, host, port):
@@ -114,8 +123,8 @@ class myThread (threading.Thread):
 					utcDatetime = datetime.datetime.utcnow()
 					utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-					event = site.tweet(False, command[6:], site.getId(), utcTime, site.getIndex(), -1, -1, -1)
-					self.commit(event)
+					proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), utcTime))
+					self.prepare(proposal)
 				elif command == "view":
 					site.view()
 				elif command == "quit":
@@ -130,8 +139,8 @@ class myThread (threading.Thread):
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 					
 					print "Unblocking User: " + command[8:]
-					event = site.unblock(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
-					self.commit(event)
+					proposal = (site.getIndex(), ("unblock" ,ord(name[0])-65, site.getId(), utcTime))
+					self.prepare(proposal)
 				elif command[:6] == "block ":
 					name = command[6:]
 					siteName = sys.argv[2]
@@ -140,18 +149,12 @@ class myThread (threading.Thread):
 					utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
 					print "Blocking User: " + command[6:]
-					event = site.block(False, ord(name[0])-65, site.getId(), utcTime, site.getIndex(), -1, -1, -1)
-					self.commit(event)
+					proposal = (site.getIndex(), ("block", ord(name[0])-65, site.getId(), utcTime))
+					self.prepare(proposal)
 				elif command == "View Log":
 					site.viewWriteAheadLog()
-				elif command == "View Paxos":
-					site.viewPaxosLog()
-				elif command == "View Queue":
-					site.viewQueue()
 				elif command == "View Dictionary":
 					site.viewDictionary()
-
-
 				else:
 					print "Unknown command %s :(. Try again." % (command)
 
@@ -162,13 +165,20 @@ class myThread (threading.Thread):
 			if self.shutdown_flag != True:
 				asyncore.loop()
 
+	def prepare(self, proposal):
+		# RUN SYNOD ALGORITHM RATHER THAN JUST COMMITTING
+		# proposal --> (index, accVal)
+		maxPrepare = -1
+		accNum = -1
+		self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+
 	# Connect to all peers send them <msg>
-	def commit(self, event):
+	def commit(self, proposal):
 		for index, peerPort in enumerate(self.peers): # avoid connecting to self
 
 			# if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
 				# print "### Sending", msg, "to", peerPort
- 				dilledMessage = dill.dumps(event)
+ 				dilledMessage = dill.dumps(proposal)
 				# c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
 				c = Client("", peerPort, dilledMessage)
 				asyncore.loop(timeout = 5, count = 1)
@@ -225,17 +235,34 @@ if __name__ == "__main__":
 	# Try loading from pickle file
 	allIds = None
 	site = None
-	try:
-		# Create user from pickle
-		pickledUser = pickle.load( open( "pickledUser.p", "rb" ) )
-		print "pickledUser.p exists, loading into User"
-		allIds = commandThread.peers
-		site = User(sys.argv[2][0], allIds, True, pickledUser)
-	except IOError:
-		print "Site pickle doesn't exist. Creating user from scratch."
-		allIds = commandThread.peers
-		site = User(sys.argv[2][0], allIds, False, None)
+	# try:
+	# 	# Create user from pickle
+	# 	pickledWriteAheadLog = pickle.load( open( "pickledWriteAheadLog.p", "rb" ) )
 
+	# 	print "pickledWriteAheadLog.p exists, loading into User"
+	# 	allIds = commandThread.peers
+	# 	site = User(sys.argv[2][0], allIds, pickledWriteAheadLog)
+	# except IOError:
+	# 	print "Site pickle doesn't exist. Creating user from scratch."
+	# 	allIds = commandThread.peers
+	# 	site = User(sys.argv[2][0], allIds, False, None)
+	pickledWriteAheadLog = None
+	pickledCheckpoint = None
+
+	try:
+		# Try opening pickledWriteAheadLog file
+		pickledWriteAheadLog = pickle.load(open("pickledWriteAheadLog.p", "rb"))
+	except IOError:
+		print "pickledWriteAheadLog file does not exist"
+	
+	try:
+		# Try opening pickledCheckpoint file
+		pickledCheckpoint = pickle.load(open("pickledCheckpoint.p", "rb"))
+	except IOError:
+		print "pickledCheckpoint file does not exist"
+
+	allIds = commandThread.peers
+	site = User(sys.argv[2][0], allIds, pickledWriteAheadLog, pickledCheckpoint)
 
 
 
