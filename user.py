@@ -2,8 +2,9 @@ import socket
 import time
 import pickle
 
+
 class User:
-  
+
     def __init__(self, userId, peers, pickledWriteAheadLog, pickledCheckpoint):
         # Initiate private fields
         self.writeAheadLog = list()
@@ -29,8 +30,8 @@ class User:
 
         # Update index based on last proposal entry in writeAheadLog
         for proposal in self.writeAheadLog:
-                if(not (proposal == None)):
-                    self.index = self.index + 1
+            if(not (proposal == None)):
+                self.index = self.index + 1
 
         # Update commitAmt based on how many commits are in writeAheadLog
         self.commitAmt = self.index % 5
@@ -38,25 +39,27 @@ class User:
         # Check if any proposals have been committed in writeAheadLog
         if(self.commitAmt > 0):
             # Get the disjoint betweent (writeAheadLog and tweets) and (writeAheadLog and blockedUsers)
-            disjointTweets = [proposal for proposal in self.writeAheadLog if proposal not in self.tweets]
-            disjointBlocks = [proposal for proposal in self.writeAheadLog if proposal not in self.blockedUsers]
+            disjointTweets = [
+                proposal for proposal in self.writeAheadLog if proposal not in self.tweets]
+            disjointBlocks = [
+                proposal for proposal in self.writeAheadLog if proposal not in self.blockedUsers]
 
             # Update tweets
             for proposal in disjointTweets:
-            	if(proposal != None):
-                	self.insertTweets(proposal)
+                if(proposal != None):
+                    self.insertTweets(proposal)
 
             # Update blockedUsers
             for proposal in disjointBlocks:
-            	if(proposal != None):
-                	self.updateBlockedUsers(proposal)
+                if(proposal != None):
+                    self.updateBlockedUsers(proposal)
 
     def pickleWriteAheadLog(self):
         pickleWriteAheadLog = {
             "writeAheadLog": self.writeAheadLog
         }
-        pickle.dump(pickleWriteAheadLog, open("pickledWriteAheadLog" + str(self.userId) + ".p", "wb"))
-
+        pickle.dump(pickleWriteAheadLog, open(
+            "pickledWriteAheadLog" + str(self.userId) + ".p", "wb"))
 
     def pickleCheckpoint(self):
         pickleCheckpoint = {
@@ -64,8 +67,9 @@ class User:
             "blockedUsers": self.blockedUsers
         }
 
-        pickle.dump(pickleCheckpoint, open("pickledCheckpoint" + str(self.userId) + ".p", "wb"))
-        
+        pickle.dump(pickleCheckpoint, open(
+            "pickledCheckpoint" + str(self.userId) + ".p", "wb"))
+
     """
     @param
         proposal: Proposal that was accepted by a majority of acceptors
@@ -75,6 +79,7 @@ class User:
     @modifies
         writeAheadLog private field
     """
+
     def insertWriteAheadLog(self, proposal):
         # Check if last known empty index is less than or equal to proposal's index value
         if(self.index <= proposal[0]):
@@ -96,7 +101,7 @@ class User:
 
         # Update writeAheadLog
         self.pickleWriteAheadLog()
-        
+
     """
     @param
         proposal: Proposal that was accepted by a majority of acceptors
@@ -105,6 +110,7 @@ class User:
     @modifies
         tweets private field
     """
+
     def insertTweets(self, proposal):
         # proposal[3] -> (eventName, message, id, time)
         # Check if proposal is a tweet and originator of tweet is not blocking this User
@@ -126,9 +132,9 @@ class User:
                 # Temporary placeholder for index to insert proposal into writeAheadLog
                 index = -1
                 # tweets[i][[3] --> (eventName, message, id, time)
-                for i in range(0, len(self.tweets)-1):
+                for i in range(0, len(self.tweets) - 1):
                     # Check if proposal index is between neighbor proposals
-                    if(self.tweets[i][3][3] < proposal[3][3] and proposal[3][3] < self.tweets[i+1][3][3]):
+                    if(self.tweets[i][3][3] < proposal[3][3] and proposal[3][3] < self.tweets[i + 1][3][3]):
                         # Store index
                         index = i
                         break
@@ -149,6 +155,7 @@ class User:
     @return
         True if a block exists between id and receiver, false otherwise
     """
+
     def isBlocked(self, id, receiver):
         # blockedUsers[i] --> (id, receiver)
         for i in range(0, len(self.blockedUsers)):
@@ -178,7 +185,7 @@ class User:
                             # Delete originator's tweet from tweets
                             del self.tweets[i]
                         else:
-                            i = i+1
+                            i = i + 1
         # Check if proposal is unblock
         elif(proposal[3][0] == "unblock"):
             # Check if block exists
@@ -203,6 +210,7 @@ class User:
     @return
         Private field index
     """
+
     def getIndex(self):
         return self.index
 
@@ -210,6 +218,7 @@ class User:
     @return 
         Private field peers
     """
+
     def getPorts(self):
         return self.peers
 
@@ -217,6 +226,7 @@ class User:
     @return
         Private field userId
     """
+
     def getId(self):
         return self.userId
 
@@ -224,6 +234,7 @@ class User:
     @effects 
         Prints all tweets in tweets
     """
+
     def view(self):
         if(not self.tweets):
             print "No tweets are available to view"
@@ -234,17 +245,19 @@ class User:
     @effects 
         Prints all proposals in the writeAheadLog
     """
+
     def viewWriteAheadLog(self):
         if(not self.writeAheadLog):
             print "No proposals are stored in stable storage"
         for proposal in self.writeAheadLog:
             print proposal
-            
+
     """
     @effects
         Prints all blocks in the dictionary
     """
-    def viewDictionary(self):   
+
+    def viewDictionary(self):
         if(not self.blockedUsers):
             print "No blocked relations are stored in the dictionary"
         for block in self.blockedUsers:
@@ -264,6 +277,7 @@ class User:
         (accNum, accVal) of proposal acceptor has accepted at index
         (None, None) if acceptor has not accepted any proposal at index
     """
+
     def prepare(self, index, n):
         # accepted[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.accepted)):
@@ -287,6 +301,7 @@ class User:
     @return
         Highest proposal value accepted by some acceptor if one exists, None otherwise
     """
+
     def filterProposals(self, proposals):
         maxAccNum = -1
         maxAccVal = None
@@ -298,10 +313,9 @@ class User:
                 # Store accNum and accVal from proposal
                 maxAccNum = proposals[i][0]
                 maxAccVal = proposals[i][1]
-        
+
         # Highest proposal value accepted by some acceptor if one exists, None otherwise
         return maxAccVal
-
 
     """
     @param
@@ -314,6 +328,7 @@ class User:
     @modifies 
         accepted private field
     """
+
     def accept(self, index, n, v):
         # accepted[i] --> (index, maxPrepare, accNum, accval)
         for i in range(0, len(self.accepted)):
@@ -342,9 +357,10 @@ class User:
         writeAheadLog, (tweets or blockedUsers), and checkpoint private field
     @return True if this User's proposal was committed, False otherwise
     """
+
     def commit(self, proposal):
-    	print "Committing this proposal"
-    	print proposal
+        print "Committing this proposal"
+        print proposal
         # proposal --> (index, maxPrepare, accNum, accVal)
         # proposal[3] --> (eventName, message, id, time)
 
@@ -362,14 +378,14 @@ class User:
 
         # Increment amount of proposals that have been committed
         self.commitAmt = self.commitAmt + 1
-        
+
         # Check if commitAmt should occurr
         if(self.commitAmt == 5):
             # Update commitAmt
             self.pickleCheckpoint()
             # Reset commitAmt
             self.commitAmt = 0
-        
+
         # accepted[i] --> (index, maxPrepare, accNum, accVal)
         # Remove proposal from accepted since it has been commited
         for i in range(0, len(self.accepted)):
