@@ -165,6 +165,8 @@ class myThread (threading.Thread):
 			if self.shutdown_flag != True:
 				asyncore.loop()
 
+
+	# Step 1. of Synod
 	def prepare(self, proposal):
 		# RUN SYNOD ALGORITHM RATHER THAN JUST COMMITTING
 		# proposal --> (index, accVal)
@@ -176,15 +178,42 @@ class myThread (threading.Thread):
 		#		await majority responses
 		#		recv majority acks
 		#
-		majority = len(self.peers) - 1
-		for peerPort in self.peers:
-			dilledMessage = dill.dumps(proposal)
-
 		
-		maxPrepare = -1
-		accNum = -1
-		self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+		
+		'''
+		prepare: send propose to everyone
+		in handle_accept():
+			based on proposal, listen to corresponding acks
 
+
+		'''
+		dilledProposal = dill.dumps(proposal)
+
+		majority = len(self.peers) - 1
+		heardFromMajority = False
+		connectedClients = []
+		for peerPort in self.peers:
+			# send prepare(n) to all acceptors
+			c = Client("", peerPort, (site.getIndex(), site.getId())) # 1. send propose()
+			connectedClients.append(c)
+			# create new server at port that's listening for responses (majority)
+			# assume they talk back
+
+		if heardFromMajority == True:
+			value = proposal[1][1]
+			majorityAccepted = accept(site.getIndex(), value) # returns true if got ACKs from everyone
+			if majorityAccepted == True:
+				commit(dilledProposal)
+
+
+		# increment proposa
+
+	# Step 3. of Synod
+	def accept(self, n, v):
+		for peerPort in self.peers:
+			c = Client("", peerPort, (site.getIndex(), n, v)) # 1. send propose()
+			connectedClients.append(c)
+	
 
 	# Connect to all peers send them <msg>
 	def commit(self, proposal):
@@ -260,7 +289,7 @@ if __name__ == "__main__":
 	# 	print "Site pickle doesn't exist. Creating user from scratch."
 	# 	allIds = commandThread.peers
 	# 	site = User(sys.argv[2][0], allIds, False, None)
-	userId = ord(sys.argv[2][0]) - 65
+	userId = ord(sys.argv[2][0]) - 64
 	fileExt = str(userId) + ".p"
 	pickledWriteAheadLog = None
 	pickledCheckpoint = None
