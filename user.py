@@ -9,7 +9,7 @@ class User:
         self.writeAheadLog = list()
         self.tweets = list()
         self.blockedUsers = list()
-        self.userId = ord(userId) - 65
+        self.userId = userId
         self.peers = peers
         self.accepted = list()
         self.index = 0
@@ -43,17 +43,19 @@ class User:
 
             # Update tweets
             for proposal in disjointTweets:
-                self.insertTweets(proposal)
+            	if(proposal != None):
+                	self.insertTweets(proposal)
 
             # Update blockedUsers
             for proposal in disjointBlocks:
-                self.updateBlockedUsers(proposal)
+            	if(proposal != None):
+                	self.updateBlockedUsers(proposal)
 
     def pickleWriteAheadLog(self):
         pickleWriteAheadLog = {
             "writeAheadLog": self.writeAheadLog
         }
-        pickle.dump(pickleWriteAheadLog, open("pickledWriteAheadLog.p", "wb"))
+        pickle.dump(pickleWriteAheadLog, open("pickledWriteAheadLog" + str(self.userId) + ".p", "wb"))
 
 
     def pickleCheckpoint(self):
@@ -62,7 +64,7 @@ class User:
             "blockedUsers": self.blockedUsers
         }
 
-        pickle.dump(pickleCheckpoint, open("pickledCheckpoint.p", "wb"))
+        pickle.dump(pickleCheckpoint, open("pickledCheckpoint" + str(self.userId) + ".p", "wb"))
         
     """
     @param
@@ -341,6 +343,8 @@ class User:
     @return True if this User's proposal was committed, False otherwise
     """
     def commit(self, proposal):
+    	print "Committing this proposal"
+    	print proposal
         # proposal --> (index, maxPrepare, accNum, accVal)
         # proposal[3] --> (eventName, message, id, time)
 
@@ -352,6 +356,9 @@ class User:
 
         # Update commited proposal to blockedUsers
         self.updateBlockedUsers(proposal)
+
+        # Update index
+        self.index = max(self.index, proposal[0] + 1)
 
         # Increment amount of proposals that have been committed
         self.commitAmt = self.commitAmt + 1
