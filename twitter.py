@@ -168,9 +168,23 @@ class myThread (threading.Thread):
 	def prepare(self, proposal):
 		# RUN SYNOD ALGORITHM RATHER THAN JUST COMMITTING
 		# proposal --> (index, accVal)
+	
+		# send prepare to everyone
+		# await responses from a majority
+		#	if majority responds:
+		#		send accept(n,v)
+		#		await majority responses
+		#		recv majority acks
+		#
+		majority = len(self.peers) - 1
+		for peerPort in self.peers:
+			dilledMessage = dill.dumps(proposal)
+
+		
 		maxPrepare = -1
 		accNum = -1
 		self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+
 
 	# Connect to all peers send them <msg>
 	def commit(self, proposal):
