@@ -63,13 +63,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
             # FILTER RECEIVES
             # Commit proposal to writeAheadLog
-            myProposalCommitted = site.commit(serializedMessage)
-            # Check if this User's proposal was committed
-            if(myProposalCommitted):
-                print "Your proposal was commited"
-            else:
-                print "Your proposal was not commited"
-
+            site.commit(serializedMessage)
 
 class Server(asyncore.dispatcher_with_send):
     def __init__(self, host, port):
