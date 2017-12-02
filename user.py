@@ -329,6 +329,10 @@ class User:
 
         # proposal[i] --> (accNum, accVal)
         for i in range(0, len(proposals)):
+        	# Check if current proposal does not contain an accNum
+        	if(proposals[i][0]):
+        		continue
+
             # Check if current proposal is greater than maxAccNum
             if(proposals[i][0] > maxAccNum):
                 # Store accNum and accVal from proposal
