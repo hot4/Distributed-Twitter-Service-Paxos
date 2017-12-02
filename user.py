@@ -264,6 +264,24 @@ class User:
             print block
 
     """
+    @effects
+    	Creates a list of indexes that have no entry in the writeAheadLog
+    @returns
+    	List of indexes that are holes in the writeAheadLog
+    """
+    def findHoles(self):
+    	# Variable that will contain indexes of holes in writeAheadLog
+    	holes = list()
+
+    	# writeAheadLog(i) --> (index, maxPrepare, accNum, accVal)
+    	for i in range(0, len(self.writeAheadLog)):
+    		# Check if current index has no entry
+    		if(self.writeAheadLog(i) == None):
+    			holes.append(i)
+
+    	return holes
+
+    """
     @param
         index: Index some proposer wishes to write a proposal to in writeAheadLog
         n: Proposal number from a proposer
@@ -329,6 +347,10 @@ class User:
 
         # proposal[i] --> (accNum, accVal)
         for i in range(0, len(proposals)):
+        	# Check if current proposal does not contain an accNum
+        	if(proposals[i][0]):
+        		continue
+
             # Check if current proposal is greater than maxAccNum
             if(proposals[i][0] > maxAccNum):
                 # Store accNum and accVal from proposal
