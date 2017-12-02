@@ -265,20 +265,20 @@ class User:
 
     """
     @param
-
         index: Index some proposer wishes to write a proposal to in writeAheadLog
         n: Proposal number from a proposer
     @effects
-        Updates maxPrepare of accepted proposal if one exists at index
-        Adds promise to accepted
+        Updates maxPrepare of accepted/committed proposal at index if one exists
+        Adds promise to accepted otherwise
     @modifies
-        accepted private field
+        accepted or writeAheadLog private field
     @return
         (accNum, accVal) of proposal acceptor has accepted at index
-        (None, None) if acceptor has not accepted any proposal at index
+        None if acceptor has not accepted any proposal at index
     """
 
     def prepare(self, index, n):
+    	# Check if proposal has been accepted at index
         # accepted[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.accepted)):
             # Check if index are the same and n is greater than maxPrepare
@@ -288,12 +288,22 @@ class User:
                 # Return (accNum, accVal)
                 return (self.accepted[i][2], self.accepted[i][3])
 
+        # Check if proposal has been committed at index
+        # writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
+        for i in range(0, len(self.writeAheadLog)):
+        	# Check if index are the same and n is greater than maxPrepare
+        	if(self.writeAheadLog[i][0] == index and self.writeAheadLog[i][1] f< n):
+        		# Set maxPrepare equal to n
+        		self.writeAheadLog[i][1] = n
+        		# Return (accNum, accVal)
+        		return (self.writeAheadLog[i][2], self.writeAheadLog[i][3])
+
         # Acceptor has not accepted any value at index
         # Represents promise to proposer
         proposal = (index, n, None, None)
         # Add promise to accepted
         self.accepted.append(proposal)
-        return (None, None)
+        return None
 
     """
     @param
@@ -323,30 +333,69 @@ class User:
         n: Proposal number from a proposer
         v: Proposal value from a proposer
     @effects
-        Updates maxPrepare, accNum, and accVal for proposal at index if one exists
-        Inserts a new accepted proposal into accepted
+        Updates maxPrepare, accNum, and accVal of accepted/committed proposal at index if one exists
+        Inserts a new accepted proposal into accepted otherwise
     @modifies 
-        accepted private field
+        accepted and writeAheadLog private field
+	@returns
+		(accNum, accVal) at index that has been stored
     """
 
     def accept(self, index, n, v):
+    	# accNum and accVal variables that have been stored at index
+    	accNum = -1
+    	accVal = None
+
+    	# Check if a proposal has been accepted at index
         # accepted[i] --> (index, maxPrepare, accNum, accval)
         for i in range(0, len(self.accepted)):
-            # Check if index are the same and n is greater than or equal to maxPrepare
-            if(accepted[i][0] == index and n >= accepted[i][1]):
-                # Update accNum
-                accepted[i][2] = n
-                # Update accVal
-                accepted[i][3] = v
-                # Update maxPrepare
-                accepted[i][1] = n
+            # Check if index are the same
+            if(self.accepted[i][0] == index):
+            	# Check if n is greater than or equal to maxPrepare
+            	if(n >= self.accepted[i][1]):
+                	# Update accNum
+                	self.accepted[i][2] = n
+                	# Update accVal
+                	self.accepted[i][3] = v
+                	# Update maxPrepare
+                	self.accepted[i][1] = n
 
-        # Temporary placeholder to verify proposal has been stored
+                # Store accNum and accVal at index
+                accNum = self.accepted[i][2]
+                accVal = self.accepted[i][3]
+                break
+
+		# Check if a proposal has been committed at index
+		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
+		for i in range(0, len(self.writeAheadLog)):
+			# Check if index are the same
+			if(self.writeAheadLog[i][0] == index):
+				# Check if n is greater than or equal to maxPrepare
+				if(n >= self.writeAheadLog[i][1]):
+					# Update accNum
+					self.writeAheadLog[i][2] = n
+					# Update accVal
+					self.writeAheadLog[i][3] = v
+					# Update maxPrepare
+					self.writeAheadLog[i][1] = n
+
+				# Store accNum and accVal at index
+                accNum = self.accepted[i][2]
+                accVal = self.accepted[i][3]
+                break
+
+        # Temporary placeholder to verify proposal has been stored because this may be the first time received
         proposal = (index, n, n, v)
         # Check if proposal is in accepted
         if(not (proposal in self.accepted)):
             # Add propsal to accepted
             self.accepted.append(proposal)
+
+            # Store accNum and accVal at index
+            accNum = n
+            accVal = v
+
+        return (accNum, accVal)
 
     """
     @param
