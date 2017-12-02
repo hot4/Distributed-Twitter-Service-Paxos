@@ -268,42 +268,53 @@ class User:
         index: Index some proposer wishes to write a proposal to in writeAheadLog
         n: Proposal number from a proposer
     @effects
-        Updates maxPrepare of accepted/committed proposal at index if one exists
+        Updates maxPrepare of accepted/committed proposal at index if one exists and n > maxPrepare
         Adds promise to accepted otherwise
     @modifies
         accepted or writeAheadLog private field
     @return
-        (accNum, accVal) of proposal acceptor has accepted at index
-        None if acceptor has not accepted any proposal at index
+        (accNum, accVal) of proposal that was accepted/committed at index
+        (None, None) if there is no proposal that was acepted/committed at index
+        None if there is a proposal that was accepted/commited at index
     """
 
     def prepare(self, index, n):
     	# Check if proposal has been accepted at index
         # accepted[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.accepted)):
-            # Check if index are the same and n is greater than maxPrepare
-            if(self.accepted[i][0] == index and self.accepted[i][1] < n):
-                # Set maxPrepare equal to n
-                self.accepted[i][1] = n
-                # Return (accNum, accVal)
-                return (self.accepted[i][2], self.accepted[i][3])
+            # Check if index are the same
+            if(self.accepted[i][0] == index):
+            	# Check if n is greater than maxPrepare
+            	if(self.accepted[i][1] < n):
+	                # Set maxPrepare equal to n
+	                self.accepted[i][1] = n
+	                # Return (accNum, accVal)
+	                return (self.accepted[i][2], self.accepted[i][3])
+	            else: 
+	            	# A proposal has been accepted at index but n does not exceed maxPrepare
+	            	return None
 
         # Check if proposal has been committed at index
         # writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.writeAheadLog)):
-        	# Check if index are the same and n is greater than maxPrepare
-        	if(self.writeAheadLog[i][0] == index and self.writeAheadLog[i][1] f< n):
-        		# Set maxPrepare equal to n
-        		self.writeAheadLog[i][1] = n
-        		# Return (accNum, accVal)
-        		return (self.writeAheadLog[i][2], self.writeAheadLog[i][3])
+        	# Check if index are the same
+        	if(self.writeAheadLog[i][0] == index):
+        		# Check if n is greater than maxPrepare
+        		if(self.writeAheadLog[i][1] < n):
+	        		# Set maxPrepare equal to n
+	        		self.writeAheadLog[i][1] = n
+	        		# Return (accNum, accVal)
+	        		return (self.writeAheadLog[i][2], self.writeAheadLog[i][3])
+	        	else:
+	        		# A proposal has been committed at index but n does not exceed maxPrepare
+	        		return None
 
-        # Acceptor has not accepted any value at index
+        # Acceptor has not accepted/commited any proposal at index
         # Represents promise to proposer
         proposal = (index, n, None, None)
         # Add promise to accepted
         self.accepted.append(proposal)
-        return None
+        return (None, None)
 
     """
     @param
@@ -333,15 +344,17 @@ class User:
         n: Proposal number from a proposer
         v: Proposal value from a proposer
     @effects
-        Updates maxPrepare, accNum, and accVal of accepted/committed proposal at index if one exists
+        Updates maxPrepare, accNum, and accVal of accepted/committed proposal at index if one exists and n >= maxPrepare
         Inserts a new accepted proposal into accepted otherwise
     @modifies 
         accepted and writeAheadLog private field
 	@returns
-		(accNum, accVal) at index that has been stored
+		(accNum, accVal) of proposal that has been accepted/committed at index
     """
 
     def accept(self, index, n, v):
+    	# Flag indicates if proposal has been accepted/committed at index
+    	seen = False
     	# accNum and accVal variables that have been stored at index
     	accNum = -1
     	accVal = None
@@ -351,6 +364,9 @@ class User:
         for i in range(0, len(self.accepted)):
             # Check if index are the same
             if(self.accepted[i][0] == index):
+            	# Update flag
+            	seen = True
+
             	# Check if n is greater than or equal to maxPrepare
             	if(n >= self.accepted[i][1]):
                 	# Update accNum
@@ -370,6 +386,9 @@ class User:
 		for i in range(0, len(self.writeAheadLog)):
 			# Check if index are the same
 			if(self.writeAheadLog[i][0] == index):
+				# Update flag
+				seen = True
+
 				# Check if n is greater than or equal to maxPrepare
 				if(n >= self.writeAheadLog[i][1]):
 					# Update accNum
@@ -384,69 +403,91 @@ class User:
                 accVal = self.accepted[i][3]
                 break
 
-        # Temporary placeholder to verify proposal has been stored because this may be the first time received
-        proposal = (index, n, n, v)
-        # Check if proposal is in accepted
-        if(not (proposal in self.accepted)):
-            # Add propsal to accepted
-            self.accepted.append(proposal)
+        # Check if this is the first time acceptor is receiving accept message for index
+        if(!seen):
+        	# Add proposal to accepted
+        	self.accepted.append((index, n, n, v))
 
-            # Store accNum and accVal at index
-            accNum = n
-            accVal = v
+        	# Stored accNum and accVal at index
+        	accNum = n
+        	accVal = v
 
         return (accNum, accVal)
 
     """
     @param
-        proposal: proposal that accepted by a majority of acceptors
+        proposal: proposal that was accepted by a majority of acceptors
     @effects
-        Adds proposal to writeAheadLog and (tweets or blockedUsers)
+    	Given no proposal has been accepted at index
+        	Adds proposal to writeAheadLog and (tweets or blockedUsers)
+        	Removes proposal from accepted
     @modifies 
         writeAheadLog, (tweets or blockedUsers), and checkpoint private field
-    @return True if this User's proposal was committed, False otherwise
     """
 
     def commit(self, proposal):
-        print "Committing this proposal"
-        print proposal
-        # proposal --> (index, maxPrepare, accNum, accVal)
-        # proposal[3] --> (eventName, message, id, time)
+    	# proposal --> (index, accVal)
+    	# Flag indicates if proposal has been accepted/committed at index
+    	seen = False
 
-        # Insert committed proposal to writeAheadLog
-        self.insertWriteAheadLog(proposal)
-
-        # Insert committed proposal to tweets
-        self.insertTweets(proposal)
-
-        # Update commited proposal to blockedUsers
-        self.updateBlockedUsers(proposal)
-
-        # Update index
-        self.index = max(self.index, proposal[0] + 1)
-
-        # Increment amount of proposals that have been committed
-        self.commitAmt = self.commitAmt + 1
-
-        # Check if commitAmt should occurr
-        if(self.commitAmt == 5):
-            # Update commitAmt
-            self.pickleCheckpoint()
-            # Reset commitAmt
-            self.commitAmt = 0
-
-        # accepted[i] --> (index, maxPrepare, accNum, accVal)
-        # Remove proposal from accepted since it has been commited
+    	# commit --> (index, maxPrepare, accNum, accVal)
+    	# commit[3] --> (eventName, message, id, time)
+    	# Variable that represents what should be committed at index
+    	commit = (proposal[0], -1, -1, proposal[1])
+    	
+    	# accepted[i] --> (index, maxPrepare, accNum, accVal)
+        # Remove proposal from accepted since it will or has been committed
         for i in range(0, len(self.accepted)):
             # Check if index are the same
             if(self.accepted[i][0] == proposal[0]):
+            	# Store maxPrepare and accNum
+            	commit[1] = self.accepted[i][1]
+            	commit[2] = self.accepted[i][2]
+            	
+            	# Delete proposal from accepted
                 del self.accepted[i]
                 break
 
-        # Check if id's are the same
-        if(proposal[3][2] == self.userId):
-            # This User's proposal was committed
-            return True
-        else:
-            # This User's proposal was not commited
-            return False
+    	# Check if a proposal has been committed at index
+    	# writeAheadLog(i) --> (index, maxPrepare, accNum, accVal) or None
+    	for i in range(0, self.writeAheadLog):
+    		# Check if current index is not None
+    		if(self.writeAheadLog(i) != None):
+    			# Check if index is the same index
+    			if(self.writeAheadLog[i][0] == proposal[0]):
+    				# Update flag
+    				seen = True
+    				print "Tried committing: %s but %s has already been commited at %i", commit, self.writeAheadLog[i], self.writeAheadLog[i][0]
+    				break
+
+    	# Check if a proposal has been committed at index
+    	if(!seen):
+    		 # Check if id's are the same
+	        if(commit[3][2] == self.userId):
+	            # This User's proposal was committed
+	            print "%i was able to commit %s", self.userId, commit
+	        else:
+	            # This User is committing some other proposer's proposal
+				print "%i is committing %i's proposal %s", self.userId, commit[3][2], commit
+
+	        # Insert committed proposal to writeAheadLog
+	        self.insertWriteAheadLog(commit)
+
+	        # Insert committed proposal to tweets
+	        self.insertTweets(commit)
+
+	        # Update commited proposal to blockedUsers
+	        self.updateBlockedUsers(commit)
+
+	        # Update index
+	        self.index = max(self.index, commit[0] + 1)
+
+	        # Increment amount of proposals that have been committed
+	        self.commitAmt = self.commitAmt + 1
+
+	        # Check if commitAmt should occurr
+	        if(self.commitAmt == 5):
+	            # Update commitAmt
+	            self.pickleCheckpoint()
+	            # Reset commitAmt
+	            self.commitAmt = 0
