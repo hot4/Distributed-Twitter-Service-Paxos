@@ -52,18 +52,44 @@ class Client(asyncore.dispatcher_with_send):
     # 	pass
 
     def handle_error(self):
-        print "Can't connect to peer at %s:%s" % (self.host, self.port)
-
+        # print "Can't connect to peer at %s:%s" % (self.host, self.port)
+        print
 
 class EchoHandler(asyncore.dispatcher_with_send):
-    def handle_read(self):
-        data = self.recv(16384)
-        if data:
-            serializedMessage = dill.loads(data)
+
+	def handle_read(self):
+		data = self.recv(16384)
+		if data:
+			serializedMessage = dill.loads(data)
+
+			# Check if prepare
+			if(serializedMessage[0] == "prepare"):
+				# serializedMessage --> (flagString, IP|PORT, proposal)
+				# proposal --> (index, n, event)
+				print "Recevied prepare message ", serializedMessage[2], " from ", serializedMessage[1]
+				promise = site.prepare(serializedMessage[2][0], serializedMessage[2][1])
+
+				# promise --> (index, accNum, accVal)
+				# Check if promise is None
+				if(promise == None):
+					print serializedMessage[2][1], " does not exceed maxPrepare value. ", site.getId(), " cannot promise."
+				else:
+					dilledMessage = dill.dumps(("promise", serializedMessage[1], serializedMessage[2], promise))
+					for index, peerPort in enumerate(site.getPorts()):
+			    			c = Client("", peerPort, dilledMessage)
+			    			asyncore.loop(timeout=5, count=1)
+
+			if(serializedMessage[0] == "promise"):
+				# serializedMessage --> (flagString, IP|POR, proposal, promise)
+				print "Received promise message ", serializedMessage[3]
+				site.addPromise(serializedMessage[3])
+				
+				print site.getPromises()
+				print "Total: ", site.getAmtSites()
 
             # FILTER RECEIVES
             # Commit proposal to writeAheadLog
-            site.commit(serializedMessage)
+            # site.commit(serializedMessage)
 
 class Server(asyncore.dispatcher_with_send):
     def __init__(self, host, port):
@@ -111,6 +137,11 @@ class myThread (threading.Thread):
                        for line in open('EC2-peers.txt')]
 
     def run(self):
+        # Update this User's IP and port private field
+        for index, peerPort in enumerate(self.peers):
+        	if(peerPort == int(sys.argv[1])):
+        		site.updateIPPort(self.ec2ips[index], peerPort)
+
         # Enter while loop accepting the following commands
         if self.name == 'commandThread':
             while 1:
@@ -166,11 +197,18 @@ class myThread (threading.Thread):
                 asyncore.loop()
 
     def prepare(self, proposal):
+    	print site.getId(), " is proposing ", proposal, " to be committed at index ", proposal[0]
         # RUN SYNOD ALGORITHM RATHER THAN JUST COMMITTING
         # proposal --> (index, accVal)
         maxPrepare = -1
-        accNum = -1
-        self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+        accNum = site.getId()
+        # self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+
+        # Broadcast to all sites
+        for index, peerPort in enumerate(self.peers):
+        	dilledMessage = dill.dumps(("prepare", (site.getIP(), site.getPort()), (proposal[0], maxPrepare, accNum, proposal[1])))
+        	c = Client("", peerPort, dilledMessage)
+        	asyncore.loop(timeout=5, count=1)
 
     # Connect to all peers send them <msg>
     def commit(self, proposal):
@@ -182,7 +220,7 @@ class myThread (threading.Thread):
             dilledMessage = dill.dumps(proposal)
             # c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
             c = Client("", peerPort, dilledMessage)
-            asyncore.loop(timeout=5, count=1)
+            asyncore.loop(timeout=10,  count=1)
             # else:
             # 	nonBlockedPorts = site.getPorts()
             # 	check = (index in nonBlockedPorts)
@@ -243,6 +281,7 @@ if __name__ == "__main__":
     # 	allIds = commandThread.peers
     # 	site = User(sys.argv[2][0], allIds, False, None)
     userId = ord(sys.argv[2][0]) - 65
+    port = int(sys.argv[1])
     fileExt = str(userId) + ".p"
     pickledWriteAheadLog = None
     pickledCheckpoint = None
