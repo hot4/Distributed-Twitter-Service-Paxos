@@ -22,6 +22,7 @@ import dill
 import pickle
 import datetime
 from user import User
+from select import select
 
 names_ = [line.rstrip('\n').split(' ')[0] for line in open('EC2-peers.txt')]
 ec2ips_ = [line.rstrip('\n').split(' ')[1] for line in open('EC2-peers.txt')]
@@ -52,18 +53,149 @@ class Client(asyncore.dispatcher_with_send):
     # 	pass
 
     def handle_error(self):
-        print "Can't connect to peer at %s:%s" % (self.host, self.port)
-
+        # print "Can't connect to peer at %s:%s" % (self.host, self.port)
+        print
 
 class EchoHandler(asyncore.dispatcher_with_send):
-    def handle_read(self):
-        data = self.recv(16384)
-        if data:
-            serializedMessage = dill.loads(data)
 
-            # FILTER RECEIVES
-            # Commit proposal to writeAheadLog
-            site.commit(serializedMessage)
+	def handle_read(self):
+		data = self.recv(16384)
+		if data:
+			serializedMessage = dill.loads(data)
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if prepare
+			if(serializedMessage[0] == "prepare"):
+				self.prepare(serializedMessage)
+				
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal, promise)
+			# promise --> (index, accNum, accVal)
+			# Check if promise
+			if(serializedMessage[0] == "promise" and site.getId() == serializedMessage[1][0]):
+				self.promise(serializedMessage)
+
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if accept
+			if(serializedMessage[0] == "accept"):
+				self.accept(serializedMessage)
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if ack
+			if(serializedMessage[0] == "ack"):
+				self.ack(serializedMessage)
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if commit
+			if(serializedMessage[0] == "commit"):
+				self.commit(serializedMessage)
+
+	def prepare(self, serializedMessage):
+    	# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, event)
+		# print "Recevied prepare message ", serializedMessage[2], " from ", serializedMessage[1]
+		promise = site.prepare(serializedMessage[2][0], serializedMessage[2][1])
+
+		# promise --> (index, accNum, accVal)
+		# Check if promise is None
+		if(promise == None):
+			print serializedMessage[2][1], " does not exceed maxPrepare value. ", site.getId(), " cannot promise."
+		else:
+			# Send to proposer
+			dilledMessage = dill.dumps(("promise", serializedMessage[1], serializedMessage[2], promise))
+			for index, peerPort in enumerate(site.getPorts()):
+				# Check if peerPort matches the sender
+				if(peerPort == serializedMessage[1][2]):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def promise(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal, promise)
+		# proposal --> (index, n, event)
+		print "Received promise message ", serializedMessage[3]
+
+		# Check if a majority already exists for index
+		if(site.checkPromiseMajority(serializedMessage[3][0])):
+			print "Majority of promises have already been recevied at ", serializedMessage[3][0]
+		else:
+			# Add promise for index
+			site.addPromise(serializedMessage[3])
+
+			# Check if a majority has been reached
+			if(site.checkPromiseMajority(serializedMessage[3][0])):
+				print "Majority of promises have been received at ", serializedMessage[3][0]
+				
+				# Get the subset of promises at index
+				promised = site.removePromises(serializedMessage[3][0])
+
+				# Get highest accepted proposal at index
+				highVal = site.filterPromises(promised)
+
+				# highVal --> accVal
+				# Check if highVal is None
+				if(highVal == None):
+					# This User can propose it's own value
+					highVal = serializedMessage[2][2]
+				
+				proposal = (serializedMessage[2][0], serializedMessage[2][1], highVal)
+
+				# Broadcast to all sites
+				dilledMessage = dill.dumps(("accept", serializedMessage[1], proposal))
+				for index, peerPort in enumerate(site.getPorts()):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def accept(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
+		ack = site.accept(serializedMessage[2][0], serializedMessage[2][1], serializedMessage[2][2])
+
+		# ack --> (index, accNum, accVal)
+		# Check if ack is None
+		if(ack == None):
+			print serializedMessage[2][1], " does not exceed maxPrepare value. ", site.getId(), " cannot accept."
+		else:
+			# Send to proposer
+			dilledMessage = dill.dumps(("ack", serializedMessage[1], ack))
+			for index, peerPort in enumerate(site.getPorts()):
+				# Check if peerPort matches the sender
+				if(peerPort == serializedMessage[1][2]):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def ack(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, accVal)
+		print "Received ack message ", serializedMessage[2]
+
+		# Check if a majority already exists for index
+		if(site.checkAckMajority(serializedMessage[2][0])):
+			print "Majority of ack have already been recevied at ", serializedMessage[2][0]
+		else:
+			site.addAck(serializedMessage[2])
+
+			# Check if a majority has been reached
+			if(site.checkAckMajority(serializedMessage[2][0])):
+				print "Majority of ack have been received at ", serializedMessage[2][0]
+
+				site.removeAck(serializedMessage[2][0])
+
+				proposal = (serializedMessage[2][0], serializedMessage[2][2])
+
+				# Broadcast to all sites
+				dilledMessage = dill.dumps(("commit", serializedMessage[1], proposal))
+				for index, peerPort in enumerate(site.getPorts()):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def commit(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, accVal)
+		print "Received commit message ", serializedMessage[2]
+
+		site.commit(serializedMessage[2])
+
 
 class Server(asyncore.dispatcher_with_send):
     def __init__(self, host, port):
@@ -111,19 +243,25 @@ class myThread (threading.Thread):
                        for line in open('EC2-peers.txt')]
 
     def run(self):
+        # Update this User's IP and port private field
+        for index, peerPort in enumerate(self.peers):
+        	if(peerPort == int(sys.argv[1])):
+        		site.updateIPPort(self.ec2ips[index], peerPort)
+
         # Enter while loop accepting the following commands
         if self.name == 'commandThread':
             while 1:
                 time.sleep(0.2)
+
                 command = raw_input("\nPlease enter a command:\n")
+                
                 if command[:6] == "tweet ":
                     messageBody = command[6:]
                     utcDatetime = datetime.datetime.utcnow()
                     utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-                    proposal = (site.getIndex(),
-                                ("tweet", command[6:], site.getId(), utcTime))
-                    self.prepare(proposal)
+                    proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), utcTime))
+                    self.prepare(site.getId(), proposal)
                 elif command == "view":
                     site.view()
                 elif command == "quit":
@@ -138,9 +276,8 @@ class myThread (threading.Thread):
                     utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
                     print "Unblocking User: " + command[8:]
-                    proposal = (site.getIndex(), ("unblock", ord(
-                        name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(proposal)
+                    proposal = (site.getIndex(), ("unblock", ord(name[0]) - 65, site.getId(), utcTime))
+                    self.prepare(site.getId(), proposal)
                 elif command[:6] == "block ":
                     name = command[6:]
                     siteName = sys.argv[2]
@@ -149,9 +286,8 @@ class myThread (threading.Thread):
                     utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
                     print "Blocking User: " + command[6:]
-                    proposal = (site.getIndex(), ("block", ord(
-                        name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(proposal)
+                    proposal = (site.getIndex(), ("block", ord(name[0]) - 65, site.getId(), utcTime))
+                    self.prepare(site.getId(), proposal)
                 elif command == "View Log":
                     site.viewWriteAheadLog()
                 elif command == "View Dictionary":
@@ -165,12 +301,16 @@ class myThread (threading.Thread):
             if self.shutdown_flag != True:
                 asyncore.loop()
 
-    def prepare(self, proposal):
-        # RUN SYNOD ALGORITHM RATHER THAN JUST COMMITTING
+    def prepare(self, n, proposal):
+    	print site.getId(), " is proposing ", proposal, " to be committed at index ", proposal[0], " with n = ", n
         # proposal --> (index, accVal)
-        maxPrepare = -1
-        accNum = -1
-        self.commit((proposal[0], maxPrepare, accNum, proposal[1]))
+        # accVal --> (eventName, message, id, time)
+
+        # Broadcast to all sites
+        for index, peerPort in enumerate(self.peers):
+        	dilledMessage = dill.dumps(("prepare", (site.getId(), site.getIP(), site.getPort()), (proposal[0], n, proposal[1])))
+        	c = Client("", peerPort, dilledMessage)
+        	asyncore.loop(timeout=5, count=1)
 
     # Connect to all peers send them <msg>
     def commit(self, proposal):
@@ -182,7 +322,7 @@ class myThread (threading.Thread):
             dilledMessage = dill.dumps(proposal)
             # c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
             c = Client("", peerPort, dilledMessage)
-            asyncore.loop(timeout=5, count=1)
+            asyncore.loop(timeout=10,  count=1)
             # else:
             # 	nonBlockedPorts = site.getPorts()
             # 	check = (index in nonBlockedPorts)
@@ -242,7 +382,8 @@ if __name__ == "__main__":
     # 	print "Site pickle doesn't exist. Creating user from scratch."
     # 	allIds = commandThread.peers
     # 	site = User(sys.argv[2][0], allIds, False, None)
-    userId = ord(sys.argv[2][0]) - 65
+    userId = ord(sys.argv[2][0]) - 64
+    port = int(sys.argv[1])
     fileExt = str(userId) + ".p"
     pickledWriteAheadLog = None
     pickledCheckpoint = None

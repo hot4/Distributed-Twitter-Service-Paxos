@@ -1,7 +1,8 @@
 import socket
+import datetime
 import time
 import pickle
-
+import math
 
 class User:
 
@@ -12,9 +13,15 @@ class User:
         self.blockedUsers = list()
         self.userId = userId
         self.peers = peers
-        self.accepted = list()
+        self.IP = -1
+        self.port = -1
         self.index = 0
         self.commitAmt = 0
+
+        # Proposer
+        self.promises = list()
+        self.accepted = list()
+        self.acks = list()
 
         # Check if pickledWriteAheadLog exists
         if(pickledWriteAheadLog != None):
@@ -53,6 +60,10 @@ class User:
             for proposal in disjointBlocks:
                 if(proposal != None):
                     self.updateBlockedUsers(proposal)
+
+    def updateIPPort(self, IP, port):
+    	self.IP = IP
+    	self.port = port
 
     def pickleWriteAheadLog(self):
         pickleWriteAheadLog = {
@@ -216,6 +227,20 @@ class User:
 
     """
     @return 
+    	Private field IP
+    """
+    def getIP(self):
+    	return self.IP
+
+    """
+	@return 
+		Private field port
+    """
+    def getPort(self):
+    	return self.port
+
+    """
+    @return 
         Private field peers
     """
 
@@ -229,6 +254,13 @@ class User:
 
     def getId(self):
         return self.userId
+
+    """
+    @return 
+    	Private field promises
+    """
+    def getpromises(self):
+    	return self.promises
 
     """
     @effects 
@@ -291,8 +323,8 @@ class User:
     @modifies
         accepted or writeAheadLog private field
     @return
-        (accNum, accVal) of proposal that was accepted/committed at index
-        (None, None) if there is no proposal that was acepted/committed at index
+        (index, accNum, accVal) of proposal that was accepted/committed at index
+        (index, None, None) if there is no proposal that was acepted/committed at index
         None if there is a proposal that was accepted/commited at index
     """
 
@@ -307,22 +339,21 @@ class User:
 	                # Set maxPrepare equal to n
 	                self.accepted[i][1] = n
 	                # Return (accNum, accVal)
-	                return (self.accepted[i][2], self.accepted[i][3])
-	            else: 
-	            	# A proposal has been accepted at index but n does not exceed maxPrepare
-	            	return None
+	                return (index, self.accepted[i][2], self.accepted[i][3])
+            	# A proposal has been accepted at index but n does not exceed maxPrepare
+            	return None
 
         # Check if proposal has been committed at index
         # writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.writeAheadLog)):
-        	# Check if index are the same
-        	if(self.writeAheadLog[i][0] == index):
+        	# Check if index are the same given it's not None
+        	if(self.writeAheadLogLog[i] != None and self.writeAheadLog[i][0] == index):
         		# Check if n is greater than maxPrepare
         		if(self.writeAheadLog[i][1] < n):
 	        		# Set maxPrepare equal to n
 	        		self.writeAheadLog[i][1] = n
 	        		# Return (accNum, accVal)
-	        		return (self.writeAheadLog[i][2], self.writeAheadLog[i][3])
+	        		return (index, self.writeAheadLog[i][2], self.writeAheadLog[i][3])
 	        	else:
 	        		# A proposal has been committed at index but n does not exceed maxPrepare
 	        		return None
@@ -332,30 +363,87 @@ class User:
         proposal = (index, n, None, None)
         # Add promise to accepted
         self.accepted.append(proposal)
-        return (None, None)
+        return (index, None, None)
 
     """
     @param
-        proposals: Container of proposals accepted by a majority of acceptors
+    	promise: Promise from some acceptor to only accept values greater than maxPrepare at index
+    @effects
+		Adds promimse to promises
+	@modifies
+		promises private field
+    """
+    def addPromise(self, promise):
+    	self.promises.append(promise)
+
+    """
+    @param
+    	index: Index Synod algorithm is working on
+   	@effects
+   		Checks if the amount of promises received at index exceeds the majority amount
+   	@return
+   		True if the amount of promises at index exceeds majority
+   		False otherwise
+    """
+    def checkPromiseMajority(self, index):
+    	amt = 0
+    	
+    	# promise --> (index, accNum, accVal)
+    	for promise in self.promises:
+    		# Check if index are the same
+    		if(promise[0] == index):
+    			# Increment amount of promises at index
+    			amt = amt + 1
+
+    	# Check if there are majority of promises at index
+    	if(amt > int(math.ceil(len(self.peers)/2))):
+    		return True
+    	return False
+
+    """
+	@param
+		index: Index Synod algorithm is working on
+	@effects	
+		Removes all promises at index
+	@modifies
+		promises private field
+	@return
+		A list of promises at index
+    """
+    def removePromises(self, index):
+    	promised = list()
+
+    	# promises[i] --> (index, accNum, accVal)
+    	i = 0
+    	while i < len(self.promises):
+    		# Check if index are the same
+    		if(self.promises[i][0] == index):
+    			promised.append(self.promises[i])
+    			del self.promises[i]
+    		else:
+    			i = i + 1
+
+    	return promised
+
+    """
+    @param
+        promises: Container of promises accepted by a majority of acceptors
     @return
         Highest proposal value accepted by some acceptor if one exists, None otherwise
     """
-
-    def filterProposals(self, proposals):
+    def filterPromises(self, promises):
         maxAccNum = -1
         maxAccVal = None
 
-        # proposal[i] --> (accNum, accVal)
-        for i in range(0, len(proposals)):
-        	# Check if current proposal does not contain an accNum
-        	if(proposals[i][0]):
-        		continue
-
-            # Check if current proposal is greater than maxAccNum
-            if(proposals[i][0] > maxAccNum):
-                # Store accNum and accVal from proposal
-                maxAccNum = proposals[i][0]
-                maxAccVal = proposals[i][1]
+        # proposal[i] --> (index, accNum, accVal)
+        for i in range(0, len(promises)):
+        	# Check if current proposal contains an accNum
+        	if(promises[i][1] != None):   		
+	            # Check if current proposal is greater than maxAccNum
+	            if(promises[i][1] > maxAccNum):
+	                # Store accNum and accVal from proposal
+	                maxAccNum = promises[i][1]
+	                maxAccVal = promises[i][2]
 
         # Highest proposal value accepted by some acceptor if one exists, None otherwise
         return maxAccVal
@@ -371,7 +459,7 @@ class User:
     @modifies 
         accepted and writeAheadLog private field
 	@returns
-		(accNum, accVal) of proposal that has been accepted/committed at index
+		(index, accNum, accVal) of proposal that has been accepted/committed at index
     """
 
     def accept(self, index, n, v):
@@ -391,34 +479,25 @@ class User:
 
             	# Check if n is greater than or equal to maxPrepare
             	if(n >= self.accepted[i][1]):
-                	# Update accNum
-                	self.accepted[i][2] = n
-                	# Update accVal
-                	self.accepted[i][3] = v
-                	# Update maxPrepare
-                	self.accepted[i][1] = n
+                	# Update 
+                	self.accepted[i] = (index, n, n, v)
 
                 # Store accNum and accVal at index
                 accNum = self.accepted[i][2]
                 accVal = self.accepted[i][3]
-                break
 
 		# Check if a proposal has been committed at index
 		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
 		for i in range(0, len(self.writeAheadLog)):
-			# Check if index are the same
-			if(self.writeAheadLog[i][0] == index):
+			# Check if index are the same given its not None
+			if(self.writeAheadLog[i] != None and self.writeAheadLog[i][0] == index):
 				# Update flag
 				seen = True
 
 				# Check if n is greater than or equal to maxPrepare
 				if(n >= self.writeAheadLog[i][1]):
-					# Update accNum
-					self.writeAheadLog[i][2] = n
-					# Update accVal
-					self.writeAheadLog[i][3] = v
-					# Update maxPrepare
-					self.writeAheadLog[i][1] = n
+					# Update 
+					self.writeAheadLog[i] = (index, n, n, v)
 
 				# Store accNum and accVal at index
                 accNum = self.accepted[i][2]
@@ -426,7 +505,7 @@ class User:
                 break
 
         # Check if this is the first time acceptor is receiving accept message for index
-        if(!seen):
+        if(not seen):
         	# Add proposal to accepted
         	self.accepted.append((index, n, n, v))
 
@@ -434,7 +513,59 @@ class User:
         	accNum = n
         	accVal = v
 
-        return (accNum, accVal)
+        return (index, accNum, accVal)
+
+    """
+    @param
+    	ack: Proposal that was accepted by some acceptor
+    @effects
+    	Adds ack to acks
+    @modifies
+    	acks private field
+    """
+    def addAck(self, ack):
+    	self.acks.append(ack)
+
+    """
+    @param
+    	index: Index Synod algorithm is working on
+   	@effects
+   		Checks if the amount of ack received at index exceeds the majority amount
+   	@return
+   		True if the amount of ack at index exceeds majority
+   		False otherwise
+    """
+    def checkAckMajority(self, index):
+    	amt = 0
+    	
+    	# accept --> (index, accNum, accVal)
+    	for accept in self.acks:
+    		# Check if index are the same
+    		if(accept[0] == index):
+    			# Increment amount of ack at index
+    			amt = amt + 1
+
+    	# Check if there are majority of ack at index
+    	if(amt > int(math.ceil(len(self.peers)/2))):
+    		return True
+    	return False
+
+    """
+    @param
+    	index: Index Synod algorithm is working on
+    @effects
+    	Removes all acks received at index
+    @modifies
+    	acks private field
+    """
+    def removeAck(self, index):
+  		i = 0
+  		while i < len(self.acks):
+  			# Check if index are the same
+  			if(self.acks[i] == index):
+  				del self.acks[i]
+  			else:
+  				i = i + 1
 
     """
     @param
@@ -458,39 +589,40 @@ class User:
     	commit = (proposal[0], -1, -1, proposal[1])
     	
     	# accepted[i] --> (index, maxPrepare, accNum, accVal)
-        # Remove proposal from accepted since it will or has been committed
-        for i in range(0, len(self.accepted)):
-            # Check if index are the same
+        # Remove proposals from accepted since it will or has been committed
+        i = 0
+        while i < len(self.accepted):
+        	# Check if index are the same
             if(self.accepted[i][0] == proposal[0]):
             	# Store maxPrepare and accNum
-            	commit[1] = self.accepted[i][1]
-            	commit[2] = self.accepted[i][2]
-            	
+            	commit = (proposal[0], max(self.accepted[i][1], commit[1]), max(self.accepted[i][2], commit[2]), proposal[1])
+        
             	# Delete proposal from accepted
                 del self.accepted[i]
-                break
+            else:
+            	i = i + 1
 
     	# Check if a proposal has been committed at index
     	# writeAheadLog(i) --> (index, maxPrepare, accNum, accVal) or None
-    	for i in range(0, self.writeAheadLog):
+    	for i in range(0, len(self.writeAheadLog)):
     		# Check if current index is not None
     		if(self.writeAheadLog(i) != None):
     			# Check if index is the same index
     			if(self.writeAheadLog[i][0] == proposal[0]):
     				# Update flag
     				seen = True
-    				print "Tried committing: %s but %s has already been commited at %i", commit, self.writeAheadLog[i], self.writeAheadLog[i][0]
+    				print "Tried committing: ", commit, " but ", self.writeAheadLog[i], " has already been commited at ", self.writeAheadLog[i][0]
     				break
 
     	# Check if a proposal has been committed at index
-    	if(!seen):
+    	if(not seen):
     		 # Check if id's are the same
 	        if(commit[3][2] == self.userId):
 	            # This User's proposal was committed
-	            print "%i was able to commit %s", self.userId, commit
+	            print  self.userId, " was able to commit ", commit
 	        else:
 	            # This User is committing some other proposer's proposal
-				print "%i is committing %i's proposal %s", self.userId, commit[3][2], commit
+				print self.userId, " is committing ",  commit[3][2], "'s proposal ", commit
 
 	        # Insert committed proposal to writeAheadLog
 	        self.insertWriteAheadLog(commit)
