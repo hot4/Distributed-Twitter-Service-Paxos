@@ -97,9 +97,9 @@ class EchoHandler(asyncore.dispatcher_with_send):
     @return
 		timestamp
     """
-    def timeStamp(self):
-    	utcDatetime = datetime.datetime.utcnow()
-    	return utcDatetime.strftime(site.getFormat())
+	def timeStamp(self):
+		utcDatetime = datetime.datetime.utcnow()
+		return utcDatetime.strftime(site.getFormat())
 
 	def prepare(self, serializedMessage):
     	# serializedMessage --> (flagString, id|IP|PORT, proposal)
@@ -152,7 +152,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
 				# Set new timeout timestamp
 				timeStamp = self.timeStamp()
-				site.setProposeTimeout((timestamp, (proposal[0], proposal[1], proposa[2])))
+				site.setProposeTimeout((timeStamp, (proposal[0], proposal[1], proposal[2])))
 
 				# Broadcast to all sites
 				dilledMessage = dill.dumps(("accept", serializedMessage[1], proposal))
@@ -162,6 +162,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
 	def accept(self, serializedMessage):
 		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, accVal)
 		# print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
 		ack = site.accept(serializedMessage[2][0], serializedMessage[2][1], serializedMessage[2][2])
 
@@ -269,7 +270,7 @@ class myThread (threading.Thread):
         	while 1:
         		# Check if this User has already been prompted
         		if(not prompt):
-        			print "Plesase enter a command: "
+        			print "\nPlesase enter a command: "
         			prompt = True
 
         		# Read from standard input
@@ -284,12 +285,12 @@ class myThread (threading.Thread):
     				elif(command[:5] == "block"):
     					print "Blocked: ", command[6:]
     					timeStamp = self.timeStamp()
-    					proposal = (site.getIndex(), ("block", command[6:], site.getId(), timeStamp))
+    					proposal = (site.getIndex(), ("block", ord(command[6]) - 64, site.getId(), timeStamp))
     					self.prepare(site.getId(), timeStamp, proposal)
     				elif(command[:7] == "unblock"):
     					print "Unblocked: ", command[8:]
-    					timeStamp =  site.timeStamp()
-    					proposal = (site.getIndex(), ("unblock", command[8:], site.getId(), timeStamp))
+    					timeStamp =  self.timeStamp()
+    					proposal = (site.getIndex(), ("unblock", ord(command[8]) - 64, site.getId(), timeStamp))
     					self.prepare(site.getId(), timeStamp, proposal)
     				elif(command[:4] == "View"):
     					site.view()
@@ -311,12 +312,14 @@ class myThread (threading.Thread):
         			timeStamp = self.timeStamp()
         			for i in range(0, len(proposeTimeout)):
         				# Check if proposal has been timedout
-        				if(self.amountSeconds(self.stringToTimeStamp(timeStamp), self.stringToTimeStamp(proposeTimeout[i][0])) > 5):
-        					# Clear out promises/ack that have been received at index
-        					site.removePromises(proposeTimeout[i][1][0])
-        					site.removeAcks(proposeTimeout[i][1][0])
+        				if(self.amountSeconds(self.stringToTimeStamp(timeStamp), self.stringToTimeStamp(proposeTimeout[i][0])) > 2):
+        					# Check if a majority has not been received
+        					if (not (site.checkPromiseMajority(proposeTimeout[i][1][0]) or site.checkAckMajority(proposeTimeout[i][1][0]))):
+        						# Clear out promises/ack that have been received at index
+        						site.removePromises(proposeTimeout[i][1][0])
+        						site.removeAcks(proposeTimeout[i][1][0])
 
-        					self.prepare(proposeTimeout[i][1][1]+len(site.getPorts()), timeStamp, (proposeTimeout[i][1][0], proposeTimeout[i][1][2]))
+	        					self.prepare(proposeTimeout[i][1][1]+len(site.getPorts()), timeStamp, (proposeTimeout[i][1][0], proposeTimeout[i][1][2]))
 
         # Start the server the listening for incoming connections
         elif self.name == 'serverThread':

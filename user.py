@@ -539,9 +539,10 @@ class User:
                 accNum = self.accepted[i][2]
                 accVal = self.accepted[i][3]
 
-		# Check if a proposal has been committed at index
+        # Check if a proposal has been committed at index
 		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
-		for i in range(0, len(self.writeAheadLog)):
+        for i in range(0, len(self.writeAheadLog)):
+			print "Current value: ", self.writeAheadLog[i], " and index: ", index
 			# Check if index are the same given its not None
 			if(self.writeAheadLog[i] != None and self.writeAheadLog[i][0] == index):
 				# Update flag
@@ -553,9 +554,9 @@ class User:
 					self.writeAheadLog[i] = (index, n, n, v)
 
 				# Store accNum and accVal at index
-                accNum = self.accepted[i][2]
-                accVal = self.accepted[i][3]
-                break
+				accNum = self.writeAheadLog[i][2]
+				accVal = self.writeAheadLog[i][3]
+				break
 
         # Check if this is the first time acceptor is receiving accept message for index
         if(not seen):
