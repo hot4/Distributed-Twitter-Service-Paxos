@@ -250,16 +250,28 @@ class myThread (threading.Thread):
 
         # Enter while loop accepting the following commands
         if self.name == 'commandThread':
-        	print "\nPlesase enter a command: "
+        	prompt = False
+        	# print "\nPlesase enter a command: "
         	while 1:
+        		# Check if this User has already been prompted
+        		if(not prompt):
+        			print "Plesase enter a command: "
+        			prompt = True
+
+        		# Read from standard input
         		while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-        			print "\nPlesase enter a command: "
-        			line = sys.stdin.readline()
-        			if(line):
-        				print "You said", line
-        			else:
-        				print('eof')
-        				exit(0)
+        			prompt = False
+        			command = sys.stdin.readline()
+        			print command[:5]
+    				if(command[:5] == "tweet"):
+    					print "You tweeted!"
+    					site.setProposeTimeout(self.timeStamp())
+
+        		if(site.getProposeTimeout() != None):
+        			if(self.amountSeconds(self.stringToTimeStamp(self.timeStamp()), self.stringToTimeStamp(site.getProposeTimeout())) > 2):
+
+        				print "Timeout occurred"
+
 
         		# print "Nothing said"
      #        		if line:
@@ -320,10 +332,43 @@ class myThread (threading.Thread):
         #     if self.shutdown_flag != True:
         #         asyncore.loop()
 
+    """
+    @effects
+    	Creates a string timestamp
+    @return
+		timestamp
+    """
+    def timeStamp(self):
+    	utcDatetime = datetime.datetime.utcnow()
+    	return utcDatetime.strftime(site.getFormat())
+    	
+    """
+    @effects
+    	Converts string timestamp into datetime
+    @return
+    	datetime timestamp
+    """
+    def stringToTimeStamp(self, time):
+    	return datetime.datetime.strptime(time, site.getFormat())
+
+    """
+    @param
+    	current: Current timestamp
+    	past: Previous timestamp
+    @effects
+    	Calculates the amount of seconds between current and past
+    @return
+    	Amount of seconds between current and past
+    """
+    def amountSeconds(self, current, past):
+		return datetime.timedelta.total_seconds(current - past)    	
+
     def prepare(self, n, proposal):
     	print site.getId(), " is proposing ", proposal, " to be committed at index ", proposal[0], " with n = ", n
         # proposal --> (index, accVal)
         # accVal --> (eventName, message, id, time)
+
+        site.setProposeTimeout(proposal[1][3])
 
         # Broadcast to all sites
         for index, peerPort in enumerate(self.peers):

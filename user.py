@@ -18,10 +18,14 @@ class User:
         self.index = 0
         self.commitAmt = 0
 
+        self.format = "%Y-%m-%d %H:%M:%S"
+
         # Proposer
         self.promises = list()
         self.accepted = list()
         self.acks = list()
+
+        self.proposeTimeout = None
 
         # Check if pickledWriteAheadLog exists
         if(pickledWriteAheadLog != None):
@@ -259,8 +263,33 @@ class User:
     @return 
     	Private field promises
     """
-    def getpromises(self):
+    def getPromises(self):
     	return self.promises
+
+    """
+    @return
+    	Private field format
+    """
+    def getFormat(self):
+    	return self.format
+
+    """
+    @return
+    	Private field proposeTimeout
+    """
+    def getProposeTimeout(self):
+    	return self.proposeTimeout
+
+    """
+    @param
+    	time: Timestamp
+    @effects
+		Sets proposeTimeout to time
+	@modifies
+		proposeTimeout private field
+    """
+    def setProposeTimeout(self, time):
+    	self.proposeTimeout = time
 
     """
     @effects 
@@ -620,6 +649,8 @@ class User:
 	        if(commit[3][2] == self.userId):
 	            # This User's proposal was committed
 	            print  self.userId, " was able to commit ", commit
+	            # No more timeout to wait for
+	            self.proposeTimeout = None
 	        else:
 	            # This User is committing some other proposer's proposal
 				print self.userId, " is committing ",  commit[3][2], "'s proposal ", commit
