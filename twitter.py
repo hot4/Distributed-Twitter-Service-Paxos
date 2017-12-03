@@ -264,8 +264,20 @@ class myThread (threading.Thread):
         			command = sys.stdin.readline()
         			print command[:5]
     				if(command[:5] == "tweet"):
-    					print "You tweeted!"
-    					site.setProposeTimeout(self.timeStamp())
+    					print "Message: ", command[6:]
+    					# site.setProposeTimeout(self.timeStamp())
+    				elif(command[:5] == "block"):
+    					print "Blocked: ", command[6:]
+    				elif(command[:7] == "unblock"):
+    					print "Unblocked: ", command[8:]
+    				elif(command[:4] == "View"):
+    					site.view()
+    				elif(command[:3] == "Log"):
+    					site.viewWriteAheadLog()
+    				elif(command[:10] == "Dictionary"):
+    					site.viewDictionary()
+    				else:
+    					print "Unknown command %s:( Try again." % (command)
 
         		if(site.getProposeTimeout() != None):
         			if(self.amountSeconds(self.stringToTimeStamp(self.timeStamp()), self.stringToTimeStamp(site.getProposeTimeout())) > 2):
