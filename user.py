@@ -15,12 +15,13 @@ class User:
         self.peers = peers
         self.IP = -1
         self.port = -1
-        self.accepted = list()
         self.index = 0
         self.commitAmt = 0
 
         # Proposer
         self.promises = list()
+        self.accepted = list()
+        self.acks = list()
 
         # Check if pickledWriteAheadLog exists
         if(pickledWriteAheadLog != None):
@@ -458,7 +459,7 @@ class User:
     @modifies 
         accepted and writeAheadLog private field
 	@returns
-		(accNum, accVal) of proposal that has been accepted/committed at index
+		(index, accNum, accVal) of proposal that has been accepted/committed at index
     """
 
     def accept(self, index, n, v):
@@ -478,17 +479,12 @@ class User:
 
             	# Check if n is greater than or equal to maxPrepare
             	if(n >= self.accepted[i][1]):
-                	# Update accNum
-                	self.accepted[i][2] = n
-                	# Update accVal
-                	self.accepted[i][3] = v
-                	# Update maxPrepare
-                	self.accepted[i][1] = n
+                	# Update 
+                	self.accepted[i] = (index, n, n, v)
 
                 # Store accNum and accVal at index
                 accNum = self.accepted[i][2]
                 accVal = self.accepted[i][3]
-                break
 
 		# Check if a proposal has been committed at index
 		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
@@ -500,12 +496,8 @@ class User:
 
 				# Check if n is greater than or equal to maxPrepare
 				if(n >= self.writeAheadLog[i][1]):
-					# Update accNum
-					self.writeAheadLog[i][2] = n
-					# Update accVal
-					self.writeAheadLog[i][3] = v
-					# Update maxPrepare
-					self.writeAheadLog[i][1] = n
+					# Update 
+					self.writeAheadLog[i] = (index, n, n, v)
 
 				# Store accNum and accVal at index
                 accNum = self.accepted[i][2]
@@ -521,7 +513,59 @@ class User:
         	accNum = n
         	accVal = v
 
-        return (accNum, accVal)
+        return (index, accNum, accVal)
+
+    """
+    @param
+    	ack: Proposal that was accepted by some acceptor
+    @effects
+    	Adds ack to acks
+    @modifies
+    	acks private field
+    """
+    def addAck(self, ack):
+    	self.acks.append(ack)
+
+    """
+    @param
+    	index: Index Synod algorithm is working on
+   	@effects
+   		Checks if the amount of ack received at index exceeds the majority amount
+   	@return
+   		True if the amount of ack at index exceeds majority
+   		False otherwise
+    """
+    def checkAckMajority(self, index):
+    	amt = 0
+    	
+    	# accept --> (index, accNum, accVal)
+    	for accept in self.acks:
+    		# Check if index are the same
+    		if(accept[0] == index):
+    			# Increment amount of ack at index
+    			amt = amt + 1
+
+    	# Check if there are majority of ack at index
+    	if(amt > int(math.ceil(len(self.peers)/2))):
+    		return True
+    	return False
+
+    """
+    @param
+    	index: Index Synod algorithm is working on
+    @effects
+    	Removes all acks received at index
+    @modifies
+    	acks private field
+    """
+    def removeAck(self, index):
+  		i = 0
+  		while i < len(self.acks):
+  			# Check if index are the same
+  			if(self.acks[i] == index):
+  				del self.acks[i]
+  			else:
+  				i = i + 1
 
     """
     @param
@@ -545,28 +589,29 @@ class User:
     	commit = (proposal[0], -1, -1, proposal[1])
     	
     	# accepted[i] --> (index, maxPrepare, accNum, accVal)
-        # Remove proposal from accepted since it will or has been committed
-        for i in range(0, len(self.accepted)):
-            # Check if index are the same
+        # Remove proposals from accepted since it will or has been committed
+        i = 0
+        while i < len(self.accepted):
+        	# Check if index are the same
             if(self.accepted[i][0] == proposal[0]):
             	# Store maxPrepare and accNum
-            	commit[1] = self.accepted[i][1]
-            	commit[2] = self.accepted[i][2]
-            	
+            	commit = (proposal[0], max(self.accepted[i][1], commit[1]), max(self.accepted[i][2], commit[2]), proposal[1])
+        
             	# Delete proposal from accepted
                 del self.accepted[i]
-                break
+            else:
+            	i = i + 1
 
     	# Check if a proposal has been committed at index
     	# writeAheadLog(i) --> (index, maxPrepare, accNum, accVal) or None
-    	for i in range(0, self.writeAheadLog):
+    	for i in range(0, len(self.writeAheadLog)):
     		# Check if current index is not None
     		if(self.writeAheadLog(i) != None):
     			# Check if index is the same index
     			if(self.writeAheadLog[i][0] == proposal[0]):
     				# Update flag
     				seen = True
-    				print "Tried committing: %s but %s has already been commited at %i", commit, self.writeAheadLog[i], self.writeAheadLog[i][0]
+    				print "Tried committing: ", commit, " but ", self.writeAheadLog[i], " has already been commited at ", self.writeAheadLog[i][0]
     				break
 
     	# Check if a proposal has been committed at index
@@ -574,10 +619,10 @@ class User:
     		 # Check if id's are the same
 	        if(commit[3][2] == self.userId):
 	            # This User's proposal was committed
-	            print "%i was able to commit %s", self.userId, commit
+	            print  self.userId, " was able to commit ", commit
 	        else:
 	            # This User is committing some other proposer's proposal
-				print "%i is committing %i's proposal %s", self.userId, commit[3][2], commit
+				print self.userId, " is committing ",  commit[3][2], "'s proposal ", commit
 
 	        # Insert committed proposal to writeAheadLog
 	        self.insertWriteAheadLog(commit)

@@ -81,14 +81,20 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			if(serializedMessage[0] == "accept"):
 				self.accept(serializedMessage)
 
-            # FILTER RECEIVES
-            # Commit proposal to writeAheadLog
-            # site.commit(serializedMessage)
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if ack
+			if(serializedMessage[0] == "ack"):
+				self.ack(serializedMessage)
+
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if commit
+			if(serializedMessage[0] == "commit"):
+				self.commit(serializedMessage)
 
 	def prepare(self, serializedMessage):
     	# serializedMessage --> (flagString, id|IP|PORT, proposal)
 		# proposal --> (index, n, event)
-		print "Recevied prepare message ", serializedMessage[2], " from ", serializedMessage[1]
+		# print "Recevied prepare message ", serializedMessage[2], " from ", serializedMessage[1]
 		promise = site.prepare(serializedMessage[2][0], serializedMessage[2][1])
 
 		# promise --> (index, accNum, accVal)
@@ -111,14 +117,14 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
 		# Check if a majority already exists for index
 		if(site.checkPromiseMajority(serializedMessage[3][0])):
-			print "Majority has already been recevied at ", serializedMessage[3][0]
+			print "Majority of promises have already been recevied at ", serializedMessage[3][0]
 		else:
 			# Add promise for index
 			site.addPromise(serializedMessage[3])
 
 			# Check if a majority has been reached
 			if(site.checkPromiseMajority(serializedMessage[3][0])):
-				print "Majority has been received at ", serializedMessage[3][0]
+				print "Majority of promises have been received at ", serializedMessage[3][0]
 				
 				# Get the subset of promises at index
 				promised = site.removePromises(serializedMessage[3][0])
@@ -142,8 +148,53 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
 	def accept(self, serializedMessage):
 		# serializedMessage --> (flagString, id|IP|PORT, proposal)
-		# proposal --> (index, n, event)
-		print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
+		# print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
+		ack = site.accept(serializedMessage[2][0], serializedMessage[2][1], serializedMessage[2][2])
+
+		# ack --> (index, accNum, accVal)
+		# Check if ack is None
+		if(ack == None):
+			print serializedMessage[2][1], " does not exceed maxPrepare value. ", site.getId(), " cannot accept."
+		else:
+			# Send to proposer
+			dilledMessage = dill.dumps(("ack", serializedMessage[1], ack))
+			for index, peerPort in enumerate(site.getPorts()):
+				# Check if peerPort matches the sender
+				if(peerPort == serializedMessage[1][2]):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def ack(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, accVal)
+		print "Received ack message ", serializedMessage[2]
+
+		# Check if a majority already exists for index
+		if(site.checkAckMajority(serializedMessage[2][0])):
+			print "Majority of ack have already been recevied at ", serializedMessage[2][0]
+		else:
+			site.addAck(serializedMessage[2])
+
+			# Check if a majority has been reached
+			if(site.checkAckMajority(serializedMessage[2][0])):
+				print "Majority of ack have been received at ", serializedMessage[2][0]
+
+				site.removeAck(serializedMessage[2][0])
+
+				proposal = (serializedMessage[2][0], serializedMessage[2][2])
+
+				# Broadcast to all sites
+				dilledMessage = dill.dumps(("commit", serializedMessage[1], proposal))
+				for index, peerPort in enumerate(site.getPorts()):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def commit(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, accVal)
+		print "Received commit message ", serializedMessage[2]
+
+		site.commit(serializedMessage[2])
 
 
 class Server(asyncore.dispatcher_with_send):
