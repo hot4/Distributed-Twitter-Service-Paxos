@@ -1,0 +1,19 @@
+Alice
+	Oregon
+	52.25.145.164
+
+Bob
+	Canada
+	35.182.83.179
+
+Charlie 
+	N. Virginia 
+	54.86.44.213
+
+Dina
+	London
+	35.176.0.193
+
+Ed
+	N. Virginia 
+	54.86.44.213
