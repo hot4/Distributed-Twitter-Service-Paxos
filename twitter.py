@@ -15,6 +15,7 @@ for each other site
 import threading
 import signal
 import time
+import select
 import sys
 import asyncore
 import socket
@@ -22,7 +23,6 @@ import dill
 import pickle
 import datetime
 from user import User
-from select import select
 
 names_ = [line.rstrip('\n').split(' ')[0] for line in open('EC2-peers.txt')]
 ec2ips_ = [line.rstrip('\n').split(' ')[1] for line in open('EC2-peers.txt')]
@@ -250,56 +250,75 @@ class myThread (threading.Thread):
 
         # Enter while loop accepting the following commands
         if self.name == 'commandThread':
-            while 1:
-                time.sleep(0.2)
+        	print "\nPlesase enter a command: "
+        	while 1:
+        		while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        			print "\nPlesase enter a command: "
+        			line = sys.stdin.readline()
+        			if(line):
+        				print "You said", line
+        			else:
+        				print('eof')
+        				exit(0)
 
-                command = raw_input("\nPlease enter a command:\n")
+        		# print "Nothing said"
+     #        		if line:
+					#     # something(line)
+					#     print "You said ", line
+					# else: # an empty line means stdin has been closed
+					# 	print('eof')
+					# 	exit(0)
+				# else:
+			  	# print "Somethingelse"
+        #         time.sleep(0.2)
+
+        #         command = raw_input("\nPlease enter a command:\n")
                 
-                if command[:6] == "tweet ":
-                    messageBody = command[6:]
-                    utcDatetime = datetime.datetime.utcnow()
-                    utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
+        #         if command[:6] == "tweet ":
+        #             messageBody = command[6:]
+        #             utcDatetime = datetime.datetime.utcnow()
+        #             utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
 
-                    proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command == "view":
-                    site.view()
-                elif command == "quit":
-                    self.shutdown_flag = True
-                    raise KeyboardInterrupt
-                    self.shutdown_flag = True
-                elif command[:8] == "unblock ":
-                    name = command[8:]
-                    siteName = sys.argv[2]
+        #             proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), utcTime))
+        #             self.prepare(site.getId(), proposal)
+        #         elif command == "view":
+        #             site.view()
+        #         elif command == "quit":
+        #             self.shutdown_flag = True
+        #             raise KeyboardInterrupt
+        #             self.shutdown_flag = True
+        #         elif command[:8] == "unblock ":
+        #             name = command[8:]
+        #             siteName = sys.argv[2]
 
-                    utc_datetime = datetime.datetime.utcnow()
-                    utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        #             utc_datetime = datetime.datetime.utcnow()
+        #             utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
-                    print "Unblocking User: " + command[8:]
-                    proposal = (site.getIndex(), ("unblock", ord(name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command[:6] == "block ":
-                    name = command[6:]
-                    siteName = sys.argv[2]
+        #             print "Unblocking User: " + command[8:]
+        #             proposal = (site.getIndex(), ("unblock", ord(name[0]) - 65, site.getId(), utcTime))
+        #             self.prepare(site.getId(), proposal)
+        #         elif command[:6] == "block ":
+        #             name = command[6:]
+        #             siteName = sys.argv[2]
 
-                    utc_datetime = datetime.datetime.utcnow()
-                    utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        #             utc_datetime = datetime.datetime.utcnow()
+        #             utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
-                    print "Blocking User: " + command[6:]
-                    proposal = (site.getIndex(), ("block", ord(name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command == "View Log":
-                    site.viewWriteAheadLog()
-                elif command == "View Dictionary":
-                    site.viewDictionary()
-                else:
-                    print "Unknown command %s :(. Try again." % (command)
+        #             print "Blocking User: " + command[6:]
+        #             proposal = (site.getIndex(), ("block", ord(name[0]) - 65, site.getId(), utcTime))
+        #             self.prepare(site.getId(), proposal)
+        #         elif command == "View Log":
+        #             site.viewWriteAheadLog()
+        #         elif command == "View Dictionary":
+        #             site.viewDictionary()
+        #         else:
+        #             print "Unknown command %s :(. Try again." % (command)
 
-        # Start the server the listening for incoming connections
-        elif self.name == 'serverThread':
-            server = Server('0.0.0.0', int(sys.argv[1]))
-            if self.shutdown_flag != True:
-                asyncore.loop()
+        # # Start the server the listening for incoming connections
+        # elif self.name == 'serverThread':
+        #     server = Server('0.0.0.0', int(sys.argv[1]))
+        #     if self.shutdown_flag != True:
+        #         asyncore.loop()
 
     def prepare(self, n, proposal):
     	print site.getId(), " is proposing ", proposal, " to be committed at index ", proposal[0], " with n = ", n
