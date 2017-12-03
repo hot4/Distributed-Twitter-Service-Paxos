@@ -1,7 +1,8 @@
 import socket
+import datetime
 import time
 import pickle
-
+import math
 
 class User:
 
@@ -14,7 +15,6 @@ class User:
         self.peers = peers
         self.IP = -1
         self.port = -1
-        self.amtSites = len(self.peers)
         self.accepted = list()
         self.index = 0
         self.commitAmt = 0
@@ -239,13 +239,6 @@ class User:
     	return self.port
 
     """
-	@return
-		Private field amtSites
-    """
-    def getAmtSites(self):
-    	return self.amtSites
-
-    """
     @return 
         Private field peers
     """
@@ -265,7 +258,7 @@ class User:
     @return 
     	Private field promises
     """
-    def getPromises(self):
+    def getpromises(self):
     	return self.promises
 
     """
@@ -371,9 +364,66 @@ class User:
         self.accepted.append(proposal)
         return (index, None, None)
 
+    """
+    @param
+    	promise: Promise from some acceptor to only accept values greater than maxPrepare at index
+    @effects
+		Adds promimse to promises
+	@modifies
+		promises private field
+    """
     def addPromise(self, promise):
     	self.promises.append(promise)
 
+    """
+    @param
+    	index: Index Synod algorithm is working on
+   	@effects
+   		Checks if the amount of promises received at index exceeds the majority amount
+   	@return
+   		True if the amount of promises at index exceeds majority
+   		False otherwise
+    """
+    def checkPromiseMajority(self, index):
+    	amt = 0
+    	
+    	# promise --> (index, accNum, accVal)
+    	for promise in self.promises:
+    		# Check if index are the same
+    		if(promise[0] == index):
+    			# Increment amount of promises at index
+    			amt = amt + 1
+
+    	# Check if there are majority of promises at index
+    	if(amt > int(math.ceil(len(self.peers)/2))):
+    		return True
+    	return False
+
+    """
+	@param
+		index: Index Synod algorithm is working on
+	@effects	
+		Removes all promises at index
+	@modifies
+		promises private field
+	@return
+		A list of promises at index
+    """
+    def removePromises(self, index):
+    	promised = list()
+
+    	# promises[i] --> (index, accNum, accVal)
+    	i = 0
+    	while i < len(self.promises):
+    		# Check if index are the same
+    		if(self.promises[i][0] == index):
+    			promised.append(self.promises[i])
+    			del self.promises[i]
+    		else:
+    			i = i + 1
+
+    	return promised
+    	
     """
     @param
         proposals: Container of proposals accepted by a majority of acceptors
