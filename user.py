@@ -18,10 +18,14 @@ class User:
         self.index = 0
         self.commitAmt = 0
 
+        self.format = "%Y-%m-%d %H:%M:%S"
+
         # Proposer
         self.promises = list()
         self.accepted = list()
         self.acks = list()
+
+        self.proposeTimeout = list()
 
         # Check if pickledWriteAheadLog exists
         if(pickledWriteAheadLog != None):
@@ -259,8 +263,57 @@ class User:
     @return 
     	Private field promises
     """
-    def getpromises(self):
+    def getPromises(self):
     	return self.promises
+
+    """
+    @return
+    	Private field format
+    """
+    def getFormat(self):
+    	return self.format
+
+    """
+    @return
+    	Private field proposeTimeout
+    """
+    def getProposeTimeout(self):
+    	return self.proposeTimeout
+
+    """
+    @param
+    	time: Timestamp
+    @effects
+		Sets proposeTimeout to time
+	@modifies
+		proposeTimeout private field
+    """
+    def setProposeTimeout(self, value):
+    	# value --> (timestamp, proposal)
+    	# proposeTimeout[i] --> (index, proposal)
+    	for i in range(0, len(self.proposeTimeout)):
+    		if(self.proposeTimeout[i][1][0] == value[1][0]):
+    			self.proposeTimeout[i] = value
+    			return
+
+    	self.proposeTimeout.append(value)
+
+    """
+    @param
+    	index: Index at which Synod completed
+    @effects
+    	Removes timeout propsal from proposeTimeout
+    @modifies
+    	proposeTimeout private field
+    """
+    def removeProposeTime(self, index):
+    	# proposeTimeout[i] --> (time, proposal)
+    	# proposal --> (index, n, event)
+    	for i in range(0, len(self.proposeTimeout)):
+    		# Check if index are the same
+    		if(self.proposeTimeout[i][1][0] == index):
+    			del self.proposeTimeout[i]
+    			break
 
     """
     @effects 
@@ -337,7 +390,7 @@ class User:
             	# Check if n is greater than maxPrepare
             	if(self.accepted[i][1] < n):
 	                # Set maxPrepare equal to n
-	                self.accepted[i][1] = n
+	                self.accepted[i] = (self.accepted[i][0], n, self.accepted[i][2], self.accepted[i][3])
 	                # Return (accNum, accVal)
 	                return (index, self.accepted[i][2], self.accepted[i][3])
             	# A proposal has been accepted at index but n does not exceed maxPrepare
@@ -347,11 +400,11 @@ class User:
         # writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.writeAheadLog)):
         	# Check if index are the same given it's not None
-        	if(self.writeAheadLogLog[i] != None and self.writeAheadLog[i][0] == index):
+        	if(self.writeAheadLog[i] != None and self.writeAheadLog[i][0] == index):
         		# Check if n is greater than maxPrepare
         		if(self.writeAheadLog[i][1] < n):
 	        		# Set maxPrepare equal to n
-	        		self.writeAheadLog[i][1] = n
+	        		self.writeAheadLog[i] = (self.writeAheadLog[i][0], n, self.writeAheadLog[i][2], self.writeAheadLog[i][3])
 	        		# Return (accNum, accVal)
 	        		return (index, self.writeAheadLog[i][2], self.writeAheadLog[i][3])
 	        	else:
@@ -486,9 +539,10 @@ class User:
                 accNum = self.accepted[i][2]
                 accVal = self.accepted[i][3]
 
-		# Check if a proposal has been committed at index
+        # Check if a proposal has been committed at index
 		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
-		for i in range(0, len(self.writeAheadLog)):
+        for i in range(0, len(self.writeAheadLog)):
+			print "Current value: ", self.writeAheadLog[i], " and index: ", index
 			# Check if index are the same given its not None
 			if(self.writeAheadLog[i] != None and self.writeAheadLog[i][0] == index):
 				# Update flag
@@ -500,9 +554,9 @@ class User:
 					self.writeAheadLog[i] = (index, n, n, v)
 
 				# Store accNum and accVal at index
-                accNum = self.accepted[i][2]
-                accVal = self.accepted[i][3]
-                break
+				accNum = self.writeAheadLog[i][2]
+				accVal = self.writeAheadLog[i][3]
+				break
 
         # Check if this is the first time acceptor is receiving accept message for index
         if(not seen):
@@ -558,7 +612,7 @@ class User:
     @modifies
     	acks private field
     """
-    def removeAck(self, index):
+    def removeAcks(self, index):
   		i = 0
   		while i < len(self.acks):
   			# Check if index are the same
@@ -590,23 +644,20 @@ class User:
     	
     	# accepted[i] --> (index, maxPrepare, accNum, accVal)
         # Remove proposals from accepted since it will or has been committed
-        i = 0
-        while i < len(self.accepted):
+        for i in range(0, len(self.accepted)):
         	# Check if index are the same
-            if(self.accepted[i][0] == proposal[0]):
-            	# Store maxPrepare and accNum
-            	commit = (proposal[0], max(self.accepted[i][1], commit[1]), max(self.accepted[i][2], commit[2]), proposal[1])
-        
-            	# Delete proposal from accepted
-                del self.accepted[i]
-            else:
-            	i = i + 1
+        	if(self.accepted[i][0] == proposal[0]):
+        		# Store maxPrepare and accNum
+        		commit = (proposal[0], self.accepted[i][1], self.accepted[i][2], proposal[1])
+
+        		del self.accepted[i]
+        		break
 
     	# Check if a proposal has been committed at index
     	# writeAheadLog(i) --> (index, maxPrepare, accNum, accVal) or None
     	for i in range(0, len(self.writeAheadLog)):
     		# Check if current index is not None
-    		if(self.writeAheadLog(i) != None):
+    		if(self.writeAheadLog[i] != None):
     			# Check if index is the same index
     			if(self.writeAheadLog[i][0] == proposal[0]):
     				# Update flag
@@ -620,6 +671,8 @@ class User:
 	        if(commit[3][2] == self.userId):
 	            # This User's proposal was committed
 	            print  self.userId, " was able to commit ", commit
+	            # Remove timeout
+	            self.removeProposeTime(commit[0])
 	        else:
 	            # This User is committing some other proposer's proposal
 				print self.userId, " is committing ",  commit[3][2], "'s proposal ", commit

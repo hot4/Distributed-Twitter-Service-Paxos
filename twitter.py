@@ -15,6 +15,7 @@ for each other site
 import threading
 import signal
 import time
+import select
 import sys
 import asyncore
 import socket
@@ -22,7 +23,6 @@ import dill
 import pickle
 import datetime
 from user import User
-from select import select
 
 names_ = [line.rstrip('\n').split(' ')[0] for line in open('EC2-peers.txt')]
 ec2ips_ = [line.rstrip('\n').split(' ')[1] for line in open('EC2-peers.txt')]
@@ -91,6 +91,16 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			if(serializedMessage[0] == "commit"):
 				self.commit(serializedMessage)
 
+	"""
+    @effects
+    	Creates a string timestamp
+    @return
+		timestamp
+    """
+	def timeStamp(self):
+		utcDatetime = datetime.datetime.utcnow()
+		return utcDatetime.strftime(site.getFormat())
+
 	def prepare(self, serializedMessage):
     	# serializedMessage --> (flagString, id|IP|PORT, proposal)
 		# proposal --> (index, n, event)
@@ -140,6 +150,10 @@ class EchoHandler(asyncore.dispatcher_with_send):
 				
 				proposal = (serializedMessage[2][0], serializedMessage[2][1], highVal)
 
+				# Set new timeout timestamp
+				timeStamp = self.timeStamp()
+				site.setProposeTimeout((timeStamp, (proposal[0], proposal[1], proposal[2])))
+
 				# Broadcast to all sites
 				dilledMessage = dill.dumps(("accept", serializedMessage[1], proposal))
 				for index, peerPort in enumerate(site.getPorts()):
@@ -148,6 +162,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 
 	def accept(self, serializedMessage):
 		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, accVal)
 		# print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
 		ack = site.accept(serializedMessage[2][0], serializedMessage[2][1], serializedMessage[2][2])
 
@@ -179,7 +194,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			if(site.checkAckMajority(serializedMessage[2][0])):
 				print "Majority of ack have been received at ", serializedMessage[2][0]
 
-				site.removeAck(serializedMessage[2][0])
+				site.removeAcks(serializedMessage[2][0])
 
 				proposal = (serializedMessage[2][0], serializedMessage[2][2])
 
@@ -250,50 +265,61 @@ class myThread (threading.Thread):
 
         # Enter while loop accepting the following commands
         if self.name == 'commandThread':
-            while 1:
-                time.sleep(0.2)
+        	prompt = False
+        	# print "\nPlesase enter a command: "
+        	while 1:
+        		# Check if this User has already been prompted
+        		if(not prompt):
+        			print "\nPlesase enter a command: "
+        			prompt = True
 
-                command = raw_input("\nPlease enter a command:\n")
-                
-                if command[:6] == "tweet ":
-                    messageBody = command[6:]
-                    utcDatetime = datetime.datetime.utcnow()
-                    utcTime = utcDatetime.strftime("%Y-%m-%d %H:%M:%S")
+        		# Read from standard input
+        		while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        			prompt = False
+        			command = sys.stdin.readline()
+    				if(command[:5] == "tweet"):
+    					print "Message: ", command[6:]
+    					timeStamp = self.timeStamp()
+    					proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), timeStamp))
+    					self.prepare(site.getId(), timeStamp, proposal)
+    				elif(command[:5] == "block"):
+    					print "Blocked: ", command[6:]
+    					timeStamp = self.timeStamp()
+    					proposal = (site.getIndex(), ("block", ord(command[6]) - 64, site.getId(), timeStamp))
+    					self.prepare(site.getId(), timeStamp, proposal)
+    				elif(command[:7] == "unblock"):
+    					print "Unblocked: ", command[8:]
+    					timeStamp =  self.timeStamp()
+    					proposal = (site.getIndex(), ("unblock", ord(command[8]) - 64, site.getId(), timeStamp))
+    					self.prepare(site.getId(), timeStamp, proposal)
+    				elif(command[:4] == "View"):
+    					site.view()
+    				elif(command[:3] == "Log"):
+    					site.viewWriteAheadLog()
+    				elif(command[:10] == "Dictionary"):
+    					site.viewDictionary()
+    				elif(command[:4] == quit):
+    					self.shutdown_flag = True
+    					raise KeyboardInterrupt
+    					self.shutdown_flag = True
+    				else:
+    					print "Unknown command %s:( Try again." % (command)
 
-                    proposal = (site.getIndex(), ("tweet", command[6:], site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command == "view":
-                    site.view()
-                elif command == "quit":
-                    self.shutdown_flag = True
-                    raise KeyboardInterrupt
-                    self.shutdown_flag = True
-                elif command[:8] == "unblock ":
-                    name = command[8:]
-                    siteName = sys.argv[2]
+        		if(len(site.getProposeTimeout()) != 0):
+        			# proposeTimeout[i] --> (time, proposal)
+        			# proposal --> (index, n, event)
+        			proposeTimeout = site.getProposeTimeout()
+        			timeStamp = self.timeStamp()
+        			for i in range(0, len(proposeTimeout)):
+        				# Check if proposal has been timedout
+        				if(self.amountSeconds(self.stringToTimeStamp(timeStamp), self.stringToTimeStamp(proposeTimeout[i][0])) > 2):
+        					# Check if a majority has not been received
+        					if (not (site.checkPromiseMajority(proposeTimeout[i][1][0]) or site.checkAckMajority(proposeTimeout[i][1][0]))):
+        						# Clear out promises/ack that have been received at index
+        						site.removePromises(proposeTimeout[i][1][0])
+        						site.removeAcks(proposeTimeout[i][1][0])
 
-                    utc_datetime = datetime.datetime.utcnow()
-                    utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-                    print "Unblocking User: " + command[8:]
-                    proposal = (site.getIndex(), ("unblock", ord(name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command[:6] == "block ":
-                    name = command[6:]
-                    siteName = sys.argv[2]
-
-                    utc_datetime = datetime.datetime.utcnow()
-                    utcTime = utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-                    print "Blocking User: " + command[6:]
-                    proposal = (site.getIndex(), ("block", ord(name[0]) - 65, site.getId(), utcTime))
-                    self.prepare(site.getId(), proposal)
-                elif command == "View Log":
-                    site.viewWriteAheadLog()
-                elif command == "View Dictionary":
-                    site.viewDictionary()
-                else:
-                    print "Unknown command %s :(. Try again." % (command)
+	        					self.prepare(proposeTimeout[i][1][1]+len(site.getPorts()), timeStamp, (proposeTimeout[i][1][0], proposeTimeout[i][1][2]))
 
         # Start the server the listening for incoming connections
         elif self.name == 'serverThread':
@@ -301,10 +327,44 @@ class myThread (threading.Thread):
             if self.shutdown_flag != True:
                 asyncore.loop()
 
-    def prepare(self, n, proposal):
+    """
+    @effects
+    	Creates a string timestamp
+    @return
+		timestamp
+    """
+    def timeStamp(self):
+    	utcDatetime = datetime.datetime.utcnow()
+    	return utcDatetime.strftime(site.getFormat())
+    	
+    """
+    @effects
+    	Converts string timestamp into datetime
+    @return
+    	datetime timestamp
+    """
+    def stringToTimeStamp(self, time):
+    	return datetime.datetime.strptime(time, site.getFormat())
+
+    """
+    @param
+    	current: Current timestamp
+    	past: Previous timestamp
+    @effects
+    	Calculates the amount of seconds between current and past
+    @return
+    	Amount of seconds between current and past
+    """
+    def amountSeconds(self, current, past):
+		return datetime.timedelta.total_seconds(current - past)    	
+
+    def prepare(self, n, timestamp, proposal):
+    	# proposal --> (index, event)
+        # event --> (eventName, message, id, time)
     	print site.getId(), " is proposing ", proposal, " to be committed at index ", proposal[0], " with n = ", n
-        # proposal --> (index, accVal)
-        # accVal --> (eventName, message, id, time)
+
+    	# Begin timeout
+        site.setProposeTimeout((timestamp, (proposal[0], n, proposal[1])))
 
         # Broadcast to all sites
         for index, peerPort in enumerate(self.peers):
@@ -312,24 +372,24 @@ class myThread (threading.Thread):
         	c = Client("", peerPort, dilledMessage)
         	asyncore.loop(timeout=5, count=1)
 
-    # Connect to all peers send them <msg>
-    def commit(self, proposal):
-        # avoid connecting to self
-        for index, peerPort in enumerate(self.peers):
+    # # Connect to all peers send them <msg>
+    # def commit(self, proposal):
+    #     # avoid connecting to self
+    #     for index, peerPort in enumerate(self.peers):
 
-            # if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
-                # print "### Sending", msg, "to", peerPort
-            dilledMessage = dill.dumps(proposal)
-            # c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
-            c = Client("", peerPort, dilledMessage)
-            asyncore.loop(timeout=10,  count=1)
-            # else:
-            # 	nonBlockedPorts = site.getPorts()
-            # 	check = (index in nonBlockedPorts)
-            # 	if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
-            #		dilledMessage = dill.dumps(event)
-            # 		c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
-            # 		asyncore.loop(timeout =5, count = 1)
+    #         # if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
+    #             # print "### Sending", msg, "to", peerPort
+    #         dilledMessage = dill.dumps(proposal)
+    #         # c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
+    #         c = Client("", peerPort, dilledMessage)
+    #         asyncore.loop(timeout=10,  count=1)
+    #         # else:
+    #         # 	nonBlockedPorts = site.getPorts()
+    #         # 	check = (index in nonBlockedPorts)
+    #         # 	if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
+    #         #		dilledMessage = dill.dumps(event)
+    #         # 		c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
+    #         # 		asyncore.loop(timeout =5, count = 1)
 
 
 class ServiceExit(Exception):
