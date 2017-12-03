@@ -423,27 +423,26 @@ class User:
     			i = i + 1
 
     	return promised
-    	
+
     """
     @param
-        proposals: Container of proposals accepted by a majority of acceptors
+        promises: Container of promises accepted by a majority of acceptors
     @return
         Highest proposal value accepted by some acceptor if one exists, None otherwise
     """
-
-    def filterProposals(self, proposals):
+    def filterPromises(self, promises):
         maxAccNum = -1
         maxAccVal = None
 
-        # proposal[i] --> (accNum, accVal)
-        for i in range(0, len(proposals)):
+        # proposal[i] --> (index, accNum, accVal)
+        for i in range(0, len(promises)):
         	# Check if current proposal contains an accNum
-        	if(proposals[i][0] != None):   		
+        	if(promises[i][1] != None):   		
 	            # Check if current proposal is greater than maxAccNum
-	            if(proposals[i][0] > maxAccNum):
+	            if(promises[i][1] > maxAccNum):
 	                # Store accNum and accVal from proposal
-	                maxAccNum = proposals[i][0]
-	                maxAccVal = proposals[i][1]
+	                maxAccNum = promises[i][1]
+	                maxAccVal = promises[i][2]
 
         # Highest proposal value accepted by some acceptor if one exists, None otherwise
         return maxAccVal

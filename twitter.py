@@ -76,6 +76,11 @@ class EchoHandler(asyncore.dispatcher_with_send):
 				self.promise(serializedMessage)
 
 
+			# serializedMessage --> (flagString, id|IP|PORT, proposal)
+			# Check if accept
+			if(serializedMessage[0] == "accept"):
+				self.accept(serializedMessage)
+
             # FILTER RECEIVES
             # Commit proposal to writeAheadLog
             # site.commit(serializedMessage)
@@ -91,12 +96,17 @@ class EchoHandler(asyncore.dispatcher_with_send):
 		if(promise == None):
 			print serializedMessage[2][1], " does not exceed maxPrepare value. ", site.getId(), " cannot promise."
 		else:
+			# Send to proposer
 			dilledMessage = dill.dumps(("promise", serializedMessage[1], serializedMessage[2], promise))
 			for index, peerPort in enumerate(site.getPorts()):
-	    			c = Client("", peerPort, dilledMessage)
-	    			asyncore.loop(timeout=5, count=1)
+				# Check if peerPort matches the sender
+				if(peerPort == serializedMessage[1][2]):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
 
 	def promise(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal, promise)
+		# proposal --> (index, n, event)
 		print "Received promise message ", serializedMessage[3]
 
 		# Check if a majority already exists for index
@@ -109,8 +119,32 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			# Check if a majority has been reached
 			if(site.checkPromiseMajority(serializedMessage[3][0])):
 				print "Majority has been received at ", serializedMessage[3][0]
+				
+				# Get the subset of promises at index
 				promised = site.removePromises(serializedMessage[3][0])
-				print promised
+
+				# Get highest accepted proposal at index
+				highVal = site.filterPromises(promised)
+
+				# highVal --> accVal
+				# Check if highVal is None
+				if(highVal == None):
+					# This User can propose it's own value
+					highVal = serializedMessage[2][2]
+				
+				proposal = (serializedMessage[2][0], serializedMessage[2][1], highVal)
+
+				# Broadcast to all sites
+				dilledMessage = dill.dumps(("accept", serializedMessage[1], proposal))
+				for index, peerPort in enumerate(site.getPorts()):
+					c = Client("", peerPort, dilledMessage)
+					asyncore.loop(timeout=5, count=1)
+
+	def accept(self, serializedMessage):
+		# serializedMessage --> (flagString, id|IP|PORT, proposal)
+		# proposal --> (index, n, event)
+		print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
+
 
 class Server(asyncore.dispatcher_with_send):
     def __init__(self, host, port):
