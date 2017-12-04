@@ -1,0 +1,16 @@
+NVirginia
+	IP
+		54.210.214.130
+	To ssh into instance
+		ssh -i ~/.ssh/hot4-dsa-pa2-nvirginia.pem ubuntu@54.210.214.130
+	To copy files into instance
+		scp -i ~/.ssh/hot4-dsa-pa2-nvirginia.pem -r ../Documents/Distributed-Twitter-Service-Paxos-master/Distributed-Twitter-Service-Paxos-master ubuntu@54.210.214.130:project2
+
+
+Cali
+	IP
+		54.153.19.59
+	To ssh into instance
+		ssh -i ~/.ssh/hot4-dsa-pa2-cali.pem ubuntu@54.153.19.59
+	To copy files into instance
+		scp -i ~/.ssh/hot4-dsa-pa2-cali.pem -r ../Documents/Distributed-Twitter-Service-Paxos-master/Distributed-Twitter-Service-Paxos-master ubuntu@54.153.19.59:project2

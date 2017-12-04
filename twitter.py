@@ -117,7 +117,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			for index, peerPort in enumerate(site.getPorts()):
 				# Check if peerPort matches the sender
 				if(peerPort == serializedMessage[1][2]):
-					c = Client("", peerPort, dilledMessage)
+					c = Client(ec2ips_[index], peerPort, dilledMessage)
 					asyncore.loop(timeout=5, count=1)
 
 	def promise(self, serializedMessage):
@@ -157,13 +157,13 @@ class EchoHandler(asyncore.dispatcher_with_send):
 				# Broadcast to all sites
 				dilledMessage = dill.dumps(("accept", serializedMessage[1], proposal))
 				for index, peerPort in enumerate(site.getPorts()):
-					c = Client("", peerPort, dilledMessage)
+					c = Client(ec2ips_[index], peerPort, dilledMessage)
 					asyncore.loop(timeout=5, count=1)
 
 	def accept(self, serializedMessage):
 		# serializedMessage --> (flagString, id|IP|PORT, proposal)
 		# proposal --> (index, n, accVal)
-		# print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
+		print "Received accept message ", serializedMessage[2], " from ", serializedMessage[1]
 		ack = site.accept(serializedMessage[2][0], serializedMessage[2][1], serializedMessage[2][2])
 
 		# ack --> (index, accNum, accVal)
@@ -176,7 +176,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 			for index, peerPort in enumerate(site.getPorts()):
 				# Check if peerPort matches the sender
 				if(peerPort == serializedMessage[1][2]):
-					c = Client("", peerPort, dilledMessage)
+					c = Client(ec2ips_[index], peerPort, dilledMessage)
 					asyncore.loop(timeout=5, count=1)
 
 	def ack(self, serializedMessage):
@@ -188,6 +188,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 		if(site.checkAckMajority(serializedMessage[2][0])):
 			print "Majority of ack have already been recevied at ", serializedMessage[2][0]
 		else:
+            # Adding ack
 			site.addAck(serializedMessage[2])
 
 			# Check if a majority has been reached
@@ -201,7 +202,7 @@ class EchoHandler(asyncore.dispatcher_with_send):
 				# Broadcast to all sites
 				dilledMessage = dill.dumps(("commit", serializedMessage[1], proposal))
 				for index, peerPort in enumerate(site.getPorts()):
-					c = Client("", peerPort, dilledMessage)
+					c = Client(ec2ips_[index], peerPort, dilledMessage)
 					asyncore.loop(timeout=5, count=1)
 
 	def commit(self, serializedMessage):
@@ -369,7 +370,7 @@ class myThread (threading.Thread):
         # Broadcast to all sites
         for index, peerPort in enumerate(self.peers):
         	dilledMessage = dill.dumps(("prepare", (site.getId(), site.getIP(), site.getPort()), (proposal[0], n, proposal[1])))
-        	c = Client("", peerPort, dilledMessage)
+        	c = Client(ec2ips_[index], peerPort, dilledMessage)
         	asyncore.loop(timeout=5, count=1)
 
     # # Connect to all peers send them <msg>
@@ -380,15 +381,15 @@ class myThread (threading.Thread):
     #         # if peerPort != int(sys.argv[1]) and len(site.getPorts()) == len(self.peers):
     #             # print "### Sending", msg, "to", peerPort
     #         dilledMessage = dill.dumps(proposal)
-    #         # c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
-    #         c = Client("", peerPort, dilledMessage)
+    #         # c = Client(self.ec2ips_[index], peerPort, dilledMessage) # send <msg> to localhost at port 5555
+    #         c = Client(self.ec2ips_[index], peerPort, dilledMessage)
     #         asyncore.loop(timeout=10,  count=1)
     #         # else:
     #         # 	nonBlockedPorts = site.getPorts()
     #         # 	check = (index in nonBlockedPorts)
     #         # 	if peerPort != int(sys.argv[1]) and len(nonBlockedPorts) > 0 and check:
     #         #		dilledMessage = dill.dumps(event)
-    #         # 		c = Client(self.ec2ips[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
+    #         # 		c = Client(self.ec2ips_[index], peerPort, dilledMessage) # send <msg> to localhost at port <peerPort>
     #         # 		asyncore.loop(timeout =5, count = 1)
 
 
@@ -464,6 +465,8 @@ if __name__ == "__main__":
 
     allIds = commandThread.peers
     site = User(userId, allIds, pickledWriteAheadLog, pickledCheckpoint)
+
+    print "peers: ", site.getPorts()
 
     # # Start new Threads
     commandThread.start()
