@@ -542,7 +542,6 @@ class User:
         # Check if a proposal has been committed at index
 		# writeAheadLog[i] --> (index, maxPrepare, accNum, accVal)
         for i in range(0, len(self.writeAheadLog)):
-			print "Current value: ", self.writeAheadLog[i], " and index: ", index
 			# Check if index are the same given its not None
 			if(self.writeAheadLog[i] != None and self.writeAheadLog[i][0] == index):
 				# Update flag
