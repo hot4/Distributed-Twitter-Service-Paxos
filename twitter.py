@@ -313,7 +313,7 @@ class myThread (threading.Thread):
         			timeStamp = self.timeStamp()
         			for i in range(0, len(proposeTimeout)):
         				# Check if proposal has been timedout
-        				if(self.amountSeconds(self.stringToTimeStamp(timeStamp), self.stringToTimeStamp(proposeTimeout[i][0])) > 2):
+        				if(self.amountSeconds(self.stringToTimeStamp(timeStamp), self.stringToTimeStamp(proposeTimeout[i][0])) > 5):
         					# Check if a majority has not been received
         					if (not (site.checkPromiseMajority(proposeTimeout[i][1][0]) or site.checkAckMajority(proposeTimeout[i][1][0]))):
         						# Clear out promises/ack that have been received at index
@@ -465,8 +465,6 @@ if __name__ == "__main__":
 
     allIds = commandThread.peers
     site = User(userId, allIds, pickledWriteAheadLog, pickledCheckpoint)
-
-    print "peers: ", site.getPorts()
 
     # # Start new Threads
     commandThread.start()
